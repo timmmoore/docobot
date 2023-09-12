@@ -105,15 +105,11 @@ PUB null()
 
 '' This is not a top-level object
 
-PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMode) : ok | ltcog, rtcog
+PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMode) : ok | ltcog, rtcog, ticsPerRotation
 '' Start our drive cogs connected to our left and right motor control pin-sets
     ticks1ms   := (clkfreq / 1_000)
     ticks1us   := (clkfreq / 1_000_000)
     ticks125ms := ticks1ms * 125
-
-    if user.WHEEL_DIA_IN_INCH <> 0
-        circInMM_x10 := distConv.circInMMforDiaInInchFloat(user.WHEEL_DIA_IN_INCH) * 10
-        tickInMM_x10 := circInMM_x10 / hallTicsPerRotation
 
     ' iff HDMI is needed, then we need this!
     'if clkfreq <> 270_000_000
@@ -129,6 +125,11 @@ PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMo
     waitms(100)
     debug(" sendatn: ", sdec(ltcog-1), " ", sdec(rtcog-1))
     cogatn(cogmask)                                     ' sync the 2 motor cogs
+
+    _, ticsPerRotation := ltWheel.hallTicInfoForMotor()
+    if user.WHEEL_DIA_IN_INCH <> 0                      ' use wheel diameter independent of motor type
+        circInMM_x10 := distConv.circInMMforDiaInInchFloat(user.WHEEL_DIA_IN_INCH) * 10
+        tickInMM_x10 := circInMM_x10 / ticsPerRotation
 
     ' init user tracking vars
     motorStopHallTicks := 0
@@ -267,10 +268,10 @@ PUB stopAfterDistance(nDistance, eDistanceUnits) | fValue
             motorStopHallTicks := (nDistance * 10 * 10) / tickInMM_x10
         DDU_IN:
             fValue := distConv.fIn2mm(nDistance)
-            motorStopHallTicks := trunc(fValue *. 10.0) / tickInMM_x10
+            motorStopHallTicks := round(fValue *. 10.0) / tickInMM_x10
         DDU_FT:
             fValue := distConv.fIn2mm(nDistance * 12)
-            motorStopHallTicks := trunc(fValue *. 10.0) / tickInMM_x10
+            motorStopHallTicks := round(fValue *. 10.0) / tickInMM_x10
         DDU_M:
             motorStopHallTicks := (nDistance * 100 * 10) / tickInMM_x10
         other:
@@ -558,12 +559,10 @@ VAR { Data for Motor Position Tracking }
     '  --------------------------
     long    hallCntsIn8thSec
 
-{
     ' USER REQUESTS
     '  Position Tracking vars
     long    motorStopHallTicks
     long    motorStopMSecs
-}
     '  Drive vars
     long    rqstPower
     long    rqstDirection

@@ -28,6 +28,8 @@
 ''                              add deadband to speed, if very slow bot jerks, so have a minimum speed
 ''   Updated.... 8 Sept 2023 (timmoore)
 ''                              connect VRA to setAcceleration
+''   Updated.... 1q Sept 2023 (timmoore)
+''                              add switch that moves bot 1 rotation forward, testing degree/distance with doco4k motors
 ''
 '' =================================================================================================
 
@@ -63,7 +65,7 @@ CON { fixed io pins }
   BATTERY_STOP                  = false 'true                          ' shutdown if min battery reached
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
-  MOTOROFFONIGNOREJOYSTICK      = true
+  MOTOROFFONIGNOREJOYSTICK      = true                          ' stop bot on ignore joystick
 
 OBJ { our Drive Subsystem }
 
@@ -318,9 +320,9 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
 
 PRI doOneRotation() | ltdegree, rtdegree
 
-    ltdegree, rtdegree := getRotationCount(DRU_DEGREES) ' get current wheel rotation
-    driveDirection(10, 0)                               ' drive forward slowly
-    stopAfterRotation(ltdegree+360, DRU_DEGREES)        ' stop after 360degree wheel rotation
+    ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES) ' get current wheel rotation
+    wheels.driveDirection(10, 0)                               ' drive forward slowly
+    wheels.stopAfterRotation(ltdegree+360, wheels.DRU_DEGREES)        ' stop after 360degree wheel rotation
 
 PRI updPosnBothJoy(): speed, direction | rawSpeed, rawDirection, rngMin, rngMax
     ' route Rt Joystick Vt (spring center) to FWD/REV (speed)
