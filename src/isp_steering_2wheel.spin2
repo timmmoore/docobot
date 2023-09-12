@@ -111,10 +111,9 @@ PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMo
     ticks1us   := (clkfreq / 1_000_000)
     ticks125ms := ticks1ms * 125
 
-    circInMM_x10 := distConv.circInMMforDiaInInchFloat(user.WHEEL_DIA_IN_INCH)
-    tickInMM_x10 := 0
-    if circInMM_x10 <> 0 and user.MOTOR_TYPE == user.MOTR_6_5_INCH
-        tickInMM_x10 := circInMM_x10 / 90
+    if user.WHEEL_DIA_IN_INCH <> 0
+        circInMM_x10 := distConv.circInMMforDiaInInchFloat(user.WHEEL_DIA_IN_INCH) * 10
+        tickInMM_x10 := circInMM_x10 / hallTicsPerRotation
 
     ' iff HDMI is needed, then we need this!
     'if clkfreq <> 270_000_000
@@ -132,10 +131,8 @@ PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMo
     cogatn(cogmask)                                     ' sync the 2 motor cogs
 
     ' init user tracking vars
-{
     motorStopHallTicks := 0
     motorStopMSecs := 0
-}
     rqstPower := 0
     rqstLtPower := 0
     rqstRtPower := 0
@@ -166,19 +163,17 @@ PUB setMaxSpeed(speed)
     ltWheel.setMaxSpeed(speed)
     rtWheel.setMaxSpeed(speed)
 
-{
+
 PUB setMaxSpeedForDistance(speed)
 '' Limit top-speed of driveDistance() operations to {speed}
     ltWheel.setMaxSpeedForDistance(speed)
     rtWheel.setMaxSpeedForDistance(speed)
-}
-{
+
 PUB calibrate()
 '' NOT WORKING: (we may need this?)
 '' have motor drivers determine fixed-offset constants
     ltWheel.calibrate()
     rtWheel.calibrate()
-'}
 
 PUB holdAtStop(bEnable)
 '' Informs the motor drivers to actively hold position (bEnable=true) or coast (bEnable=false) at end of motion
@@ -200,7 +195,6 @@ PUB driveDirection(power, direction)
     rqstPower, rqstDirection := power, direction        ' calculate effective power based on direction
     driveAtPower(calcPowerForDirection(power, direction))
 
-{
 PUB driveForDistance(leftDistance, rightDistance, eDistanceUnits)
 '' Control the forward direction or rate of turn of your robot using the {leftDistance} and {rightDistance} inputs.
 '' Turn both motors on then turn them off again when either reaches the specified distance {leftDistance} or
@@ -208,7 +202,6 @@ PUB driveForDistance(leftDistance, rightDistance, eDistanceUnits)
 '' AFFECTED BY: setAcceleration(), setMaxSpeedForDistance(), holdAtStop()
     ltWheel.driveForDistance(leftDistance, eDistanceUnits)
     rtWheel.driveForDistance(rightDistance, eDistanceUnits)
-'}
 
 PUB driveAtPower(leftPower, rightPower)
 '' Control the speed and direction of your robot using the {leftPower} and {rightPower} inputs.
@@ -222,7 +215,6 @@ PUB driveAtPower(leftPower, rightPower)
     ltWheel.SyncStatus()                                ' make sure both motors have taken value
     rtWheel.SyncStatus()
 
-{
 PUB stopAfterRotation(nRotationCount, eRotationUnits) | degreesPerTic, ticsPerRotation
 '' Stops both motors, after either of the motors reaches {rotationCount} of {rotationUnits} [DRU_HALL_TICKS, DRU_DEGREES, or DRU_ROTATIONS].
 '' USE WITH: driveDirection(), drive()
@@ -249,7 +241,6 @@ PUB stopAfterRotation(nRotationCount, eRotationUnits) | degreesPerTic, ticsPerRo
         other:
             debug("! ERROR: invalid rotationUnits Value:", udec_long(eRotationUnits))
             abort
-
 
 '' Stops both motors, after either of the motors reaches {distance} specified in {distanceUnits} [DDU_IN or DDU_MM].
 '' USE WITH: driveDirection(), drive()
@@ -307,13 +298,16 @@ PUB stopAfterTime(nTime, eTimeUnits) | timeNow
     if eTimeUnits == DTU_SEC
         timeNow := getms()
         motorStopMSecs := timeNow + (nTime * 1_000)
+        if motorStopMSecs == 0
+          motorStopMSecs := 1
     else
         timeNow := getms()
         motorStopMSecs := timeNow + nTime
+        if motorStopMSecs == 0
+          motorStopMSecs := 1
 
     if motorStopMSecs > 0
         debug("* stop motor at ", udec_long(motorStopMSecs), ", now: ", udec_long(timeNow))
-'}
 
 PUB stopMotors()
 '' Stops both motors, killing any motion that was still in progress
@@ -452,14 +446,12 @@ PUB getMaxSpeed() : nSpeed
     'nSpeed := ltWheel.getMaxSpeed()  ' return last specified user value
     nSpeed := rtWheel.getMaxSpeed()  ' return last specified user value
 
-{
 PUB getMaxSpeedForDistance() : nSpeed4dist
 '' Returns the last specified {maxSpeedForDistance}
     ' NOTE: they both contain same value so return only right-wheel value
     'nSpeed4dist := ltWheel.getMaxSpeed()  ' return last specified user value
     nSpeed4dist := rtWheel.getMaxSpeed()  ' return last specified user value
-}
-{
+
 PUB getLeftDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars
 '' Return pointers to HDMI-debug data structures for LEFT motor-object instance
     nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars := ltWheel.getDebugData()
@@ -467,7 +459,6 @@ PUB getLeftDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGrou
 PUB getRightDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars
 '' Return pointers to HDMI-debug data structures for LEFT motor-object instance
     nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars := rtWheel.getDebugData()
-'}
 
 CON { --- PUBLIC Utility Methods --- }
 
@@ -638,7 +629,7 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
 
         ltPosTrkHallTicks += hallCntsIn8thSec
 
-        'ltWheel.updateSenseData(hallCntsIn8thSec, ltHallWindowSum)
+        ltWheel.updateSenseData(hallCntsIn8thSec, ltHallWindowSum)
 
         ' ------------------------------------------
         ' PROCESS right motor
@@ -653,11 +644,10 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
 
         rtPosTrkHallTicks += hallCntsIn8thSec
 
-        'rtWheel.updateSenseData(hallCntsIn8thSec, rtHallWindowSum)
+        rtWheel.updateSenseData(hallCntsIn8thSec, rtHallWindowSum)
         ' ------------------------------------------
         ' EVALUATE any motor stop requests
 
-{
         ' if user set time/distance to stop then stop if we are past the time or distance
         if motorStopMSecs > 0
             timeNow := getms()
@@ -668,7 +658,6 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
             if ltPosTrkHallTicks > motorStopHallTicks or rtPosTrkHallTicks > motorStopHallTicks
                 stopMotors()
                 motorStopHallTicks := 0 ' and clear user request
-'}
         'pintoggle(TEST_PIN_SNS_LP_ACTV)    ' end of active side
 
         ' ------------------------------------------
@@ -844,20 +833,13 @@ PRI distanceIn90ths(newPos, bIsLeftWheel) : n90ths | priorPos
     priorPos := (bIsLeftWheel) ? priorLtPos : priorRtPos
 
     n90ths := abs(priorPos - newPos)
-{
-    if priorPos <> newPos
-        if bIsLeftWheel
-            debug("di90s-LT: ", sdec_long(newPos), sdec_long(priorPos), sdec_long(n90ths))
-        else
-            debug("di90s-RT: ", sdec_long(newPos), sdec_long(priorPos), sdec_long(n90ths))
-'}
     if bIsLeftWheel
         priorLtPos := newPos
     else
         priorRtPos := newPos
 
 CON { --- HDMI Debug Support --- }
-{
+
 CON { Constants for HDMI Debug }
 
     DBG_GROUPS_CT = 1
@@ -935,8 +917,6 @@ PUB getDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVar
         debug("* -------------")
         debug("* Steer Sent: ", udec(nGroups), uhex_long(pGroupTitles), uhex_long(pGroupNames), uhex_long(pGroupVarCts), uhex_long(pGroupVars))
         debug("* =============")
-'}
-
 
 CON { license }
 {{
