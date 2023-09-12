@@ -1,0 +1,107 @@
+'' =================================================================================================
+''
+''   File....... isp_dist_utils.spin2
+''   Purpose.... General Distance Conversion Methods
+''   Authors.... Stephen M Moraco
+''               -- Copyright (c) 2022 Iron Sheep Productions, LLC
+''               -- see below for terms of use
+''   E-mail..... stephen@ironsheep.biz
+''   Started.... Mar 2022
+''   Updated.... 14 Mar 2022
+''
+'' =================================================================================================
+
+CON { internal constants }
+
+    kPI             = PI            ' PI approx 3.14159
+    kMM_IN_INCH     = 25.4          ' One inch is equal to 25.4 mm
+    kINCH_IN_MM     = 0.03937       ' One millimeter is equal to 0.03937 inches
+    kFPS_IN_MMPS    = 0.00328084    ' 1 mm/sec = 0.00328084 ft/sec
+    kKMH_IN_MMPS    = 0.0036        ' 1 mm/sec = 0.0036 km/hr
+    kMPH_IN_FPS     = 0.681818      ' 1 ft/sec = 0.681818 mi/hr
+
+PUB null()
+
+'' This is not a top-level object
+
+PUB circInInchforDiaInInch(nDiaInch) : nCircInInch
+'' Return circumference in inch for given diameter in inch
+    ' RULE: circ = d * pi
+    nCircInInch := round(float(nDiaInch) *. kPI)
+
+PUB circInMMforDiaInInch(nDiaInch) : nCircInMM
+'' Return circumference in mm for given diameter in inch
+    nCircInMM := round(floatCircInMMforDiaInInchFloat(float(nDiaInch)))
+
+PUB circInMMforDiaInInchFloat(fDiaInch) : nCircInMM
+'' Return circumference in mm for given diameter in inch
+    nCircInMM := round(floatCircInMMforDiaInInchFloat(fDiaInch))
+
+PUB floatCircInMMforDiaInInchFloat(fDiaInch) : fCircInMM
+'' Return circumference in mm for given diameter in inch
+    ' RULE: circ = d * pi
+    fCircInMM := fDiaInch *. kPI *. kMM_IN_INCH
+
+PUB mmps2fps(nDistInMMPS) : nDistInFps
+'' Convert distance in mm/s to fps
+    ' RULE: 1 mm/sec = 0.00328084 ft/sec
+    nDistInFps := round(float(nDistInMMPS) *. kFPS_IN_MMPS)
+
+PUB in2mm(nDistInInch) : nDistInMM | fValue
+'' Convert distance in inch to mm
+    ' RULE: One inch is equal to 25.4 mm
+    fValue := float(nDistInInch) *. kMM_IN_INCH
+    nDistInMM := trunc(fValue)
+
+PUB fIn2mm(nDistInInch) : fDistInMM
+'' Convert distance in inch to mm
+    ' RULE: One inch is equal to 25.4 mm
+    fDistInMM := float(nDistInInch) *. kMM_IN_INCH
+
+PUB mm2in(nDistInMM) : nDistInInch
+'' Convert distance in mm to inches
+    ' RULE: One millimeter is equal to 0.03937 inches
+    nDistInInch := round(fMm2inFloat(float(nDistInMM)))
+
+PUB fMm2inFloat(fDistInMM) : fDistInInch
+'' Convert distance in mm to inches
+    ' RULE: One millimeter is equal to 0.03937 inches
+    fDistInInch := fDistInMM *. kINCH_IN_MM
+
+PUB mmps2kmh(nDistInMMPS) : nDistInkmph
+'' Convert distance in mm/s to km/hr
+    ' RULE: 1 mm/sec = 0.0036 km/hr
+    nDistInkmph := round(float(nDistInMMPS) *. kKMH_IN_MMPS)
+
+PUB fps2mph(nDistInFPS) : nDistInMPH
+'' Convert distance in ft/s to mi/hr
+    ' RULE: 1 ft/sec = 0.681818 mi/hr
+    nDistInMPH := round(float(nDistInFPS) *. kMPH_IN_FPS)
+
+CON { license }
+{{
+
+ -------------------------------------------------------------------------------------------------
+  MIT License
+
+  Copyright (c) 2022 Iron Sheep Productions, LLC
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+ =================================================================================================
+}}
