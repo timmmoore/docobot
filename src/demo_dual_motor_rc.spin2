@@ -99,7 +99,7 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
 
         ' override defaults, use 100 %
         wheels.setMaxSpeed(100)
-        'wheels.setMaxSpeedForDistance(100)
+        wheels.setMaxSpeedForDistance(100)
         ' just don't draw current at stop
         wheels.holdAtStop(false)
 
@@ -137,7 +137,7 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
 
     debug("* DONE")
 
-{
+
 PRI waitUntilMotorReady()
     if wheels.isReady() == false
         debug("* wait motors ready...")
@@ -166,7 +166,6 @@ PRI waitUntilMotorDone()
             else
                 waitms(2)
     debug("* Motors stopped!")
-'}
 
 CON
 
@@ -188,8 +187,9 @@ VAR
     long    bLastIgnoreJoyStks
     long    bLastShowDriveStates
     long    nAccelerationRate
+    long    nDoingOneRotation
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,} bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,} bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate, bOneRotation
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -203,6 +203,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
     'debug("* swC MID    - ---")
     debug("* swC DN     - end control")
     debug("* swD DN     - emer cutoff")
+    debug("* swE DN     - 1 rotation")
     debug("* VRA        - acceleration")
     debug("------")
 
@@ -228,6 +229,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
         remoteCtl.showDebug(bShowDebugStatus)
         bEmerCutoff := remoteCtl.swIsOff(remoteCtl.CTL_SW_D) or bMinBattery     ' emergency cutoff drive if minbattery
         remoteCtl.showDebug(FALSE)
+
+        bOneRotation := remoteCtl.swIsOff(remoteCtl.CH_11)
 
         accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)/10
 
@@ -289,6 +292,11 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                 priorDirection := rcDirection
                 priorSpeed := rcSpeed
                 finalupdate := false
+            elseif bOneRotation == false and nDoingOneRotation == false         ' no emergency cutoff and no joystick before accept 1 rotation
+                nDoingOneRotation := true
+                doOneRotation()
+            elseif bOneRotation == true and nDoingOneRotation == true           ' switch must be reset before allowed again
+                nDoingOneRotation := false
 
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
         telemetry.setcurrent(nLtmAmps, nRtmAmps)
@@ -307,6 +315,12 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
 
     ' done, stop our motors
     wheels.stop()
+
+PRI doOneRotation() | ltdegree, rtdegree
+
+    ltdegree, rtdegree := getRotationCount(DRU_DEGREES) ' get current wheel rotation
+    driveDirection(10, 0)                               ' drive forward slowly
+    stopAfterRotation(ltdegree+360, DRU_DEGREES)        ' stop after 360degree wheel rotation
 
 PRI updPosnBothJoy(): speed, direction | rawSpeed, rawDirection, rngMin, rngMax
     ' route Rt Joystick Vt (spring center) to FWD/REV (speed)
@@ -357,7 +371,7 @@ DAT
 '' rc transmitter configuration
     ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
     ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
-    validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CTL_NADA
+    validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CTL_NADA
     valid3Ways      byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CTL_NADA
 
 CON { license }
