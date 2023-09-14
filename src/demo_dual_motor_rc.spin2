@@ -57,11 +57,11 @@ CON { fixed io pins }
   SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
-  BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
+  BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 27K + 8.2K -> 3.18 = 12.6 * 9.1/(27+9.1)
   BATTERY_LOW                   = 0
-  BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
-  BATTERY_DIVIDER               = 1232.0                        ' value that makes reading match meter, battery max is 4.2V per cell (total 22.2V)
-  BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
+  BATTERY_HIGH                  = 31762                         ' 27K + 9K1 resistor divider, max voltage is 12.6V * 9100/36100 -> 3.1762
+  BATTERY_DIVIDER               = 2520.8                        ' value that makes reading match meter, battery max is 4.2V per cell (total 12.6V)
+  BATTERY_MINIMUM               = 9.6                           ' minimum voltage, battery min is 3.2V per cell (total 9.6V)
   BATTERY_STOP                  = false 'true                          ' shutdown if min battery reached
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
@@ -100,8 +100,8 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
         wheels.start(basePinLt, basePinRt, voltage, detectModeLt, detectModeRt)
 
         ' override defaults, use 100 %
-        wheels.setMaxSpeed(100)
-        wheels.setMaxSpeedForDistance(100)
+        wheels.setMaxSpeed(50)
+        wheels.setMaxSpeedForDistance(50)
         ' just don't draw current at stop
         wheels.holdAtStop(false)
 
