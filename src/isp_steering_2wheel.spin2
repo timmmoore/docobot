@@ -184,8 +184,8 @@ PUB holdAtStop(bEnable)
 PUB resetTracking()
 '' Resets the position tracking values returned by getDistance() and getRotations()
 ''  Effectively: use current position as home from now on
-    resetLtWindowAccumulator()
-    resetRtWindowAccumulator()
+    ltWheel.resetWindowAccumulators()
+    rtWheel.resetWindowAccumulators()
 
 CON { --- Subsystem Control --- }
 
@@ -261,6 +261,12 @@ PUB stopAfterDistance(nDistance, eDistanceUnits) | fValue
         abort
 
     ' convert distance to ticks (will stop at ticks limit)
+    ' Distance is translated to Hall ticks and compared with left and right motor hall ticks
+    ' The motor ticks are from start but reset on fault or estop.
+    ' So, need to getDistance and add required distance to it, to stop after a distance
+    ' So, call getDistance, then driveAtPower to start moving and then stopAfterDistance with total distance to stop.
+    ' If a fault occurs, will stop immedetely and hall ticks are reset on the faulting motor.
+    ' getDistance returns each motor separately. So use largest return distance to calculate stopAfterDistance
     case eDistanceUnits
         DDU_MM:
             motorStopHallTicks := (nDistance * 10) / tickInMM_x10
@@ -336,9 +342,9 @@ CON { --- Subsystem Status --- }
 
 PUB getDistance(eDistanceUnits) : leftDistanceInUnits, rightDistanceInUnits
 '' Returns the distance in {distanceUnits} [DDU_MM, DDU_CM, DDU_IN, DDU_FT, DDU_M, DDU_KM, DDU_MI] travelled by each motor since last reset
-    debug("- gdi ", sdec_long(ltPosTrkHallTicks), sdec_long(rtPosTrkHallTicks))
-    leftDistanceInUnits := convertDistance(ltPosTrkHallTicks, eDistanceUnits)
-    rightDistanceInUnits := convertDistance(rtPosTrkHallTicks, eDistanceUnits)
+    debug("- gdi ", sdec_long(ltWheel.getposTrkHallTicks()), sdec_long(rtWheel.getposTrkHallTicks()))
+    leftDistanceInUnits := convertDistance(ltWheel.getposTrkHallTicks(), eDistanceUnits)
+    rightDistanceInUnits := convertDistance(rtWheel.getposTrkHallTicks(), eDistanceUnits)
 
 PRI convertDistance(nValue, eDistanceUnits) : nDistanceInUnits | fValue
 ' Returns the distance in {distanceUnits} [DDU_MM, DDU_CM, DDU_IN, DDU_FT, DDU_M, DDU_KM, DDU_MI] travelled by this motor since last reset
@@ -365,9 +371,9 @@ PRI convertDistance(nValue, eDistanceUnits) : nDistanceInUnits | fValue
 
 PUB getRotationCount(eRotationUnits) : leftRotationCount, rightRotationCount
 '' Returns accumulated {*RotationCount} in {rotationUnits} [DRU_DEGREES, DRU_ROTATIONS], since last reset, for each of the motors.
-    debug("- grc ", sdec_long(ltPosTrkHallTicks), sdec_long(rtPosTrkHallTicks))
-    leftRotationCount := convertRotationCount(ltPosTrkHallTicks, eRotationUnits)
-    rightRotationCount := convertRotationCount(rtPosTrkHallTicks, eRotationUnits)
+    debug("- grc ", sdec_long(ltWheel.getposTrkHallTicks()), sdec_long(rtWheel.getposTrkHallTicks()))
+    leftRotationCount := convertRotationCount(ltWheel.getposTrkHallTicks(), eRotationUnits)
+    rightRotationCount := convertRotationCount(rtWheel.getposTrkHallTicks(), eRotationUnits)
 
 PRI convertRotationCount(nValue, eRotationUnits) : rotationCount | degreesPerTic, ticsPerRotation
 ' Returns accumulated {rotationCount} in {rotationUnits} [DRU_DEGREES, DRU_ROTATIONS, or DRU_HALL_TICKS], since last reset, for this motor.
@@ -522,8 +528,6 @@ CON { -- TASK position tracking -- }
     ' at 125 ms
     SENSE_LOOP_HZ = 8
 
-    HALL_WINDOW_SIZE = SENSE_LOOP_HZ
-
 VAR { time values & arrays }
 
     long    ticks1ms
@@ -535,29 +539,10 @@ VAR { time values & arrays }
     long    taskStack[STACK_SIZE_LONGS]
 
 VAR { Data for Motor Position Tracking }
-
-    ' summing sense values at 1/8 sec period
-    LONG    ltHallCountsWindow[HALL_WINDOW_SIZE]
-    LONG    ltHallWinIndex
-    LONG    ltHallWinEntryCt
-    LONG    ltHallCntsIn8thSec
-    LONG    ltHallWindowSum
-
-    LONG    rtHallCountsWindow[HALL_WINDOW_SIZE]
-    LONG    rtHallWinIndex
-    LONG    rtHallWinEntryCt
-    LONG    rtHallCntsIn8thSec
-    LONG    rtHallWindowSum
-
-    long    ltPosTrkHallTicks
-    long    rtPosTrkHallTicks
     long    deltaTicks
-    long    priorLtPos
-    long    priorRtPos
     long    circInMM_x10
     long    tickInMM_x10
     '  --------------------------
-    long    hallCntsIn8thSec
 
     ' USER REQUESTS
     '  Position Tracking vars
@@ -575,38 +560,23 @@ VAR { Data for Motor Position Tracking }
 
     long    notUsed
 
-PRI resetLtWindowAccumulator()
-    longfill(@ltHallCountsWindow, 0, HALL_WINDOW_SIZE) ' zero our window accum
-    ltHallWinEntryCt := ltHallWindowSum := ltHallWinIndex := 0
-    ltPosTrkHallTicks := 0
-
-PRI resetRtWindowAccumulator()
-    longfill(@rtHallCountsWindow, 0, HALL_WINDOW_SIZE) ' zero our window accum
-    rtHallWinEntryCt := rtHallWindowSum := rtHallWinIndex := 0
-    rtPosTrkHallTicks := 0
-
-CON
-
-   LEFT_WHEEL = TRUE
-   RIGHT_WHEEL = FALSE
-
-PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
+PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr, HallTicks
 ' TASK: every 1/8 Sec (8Hz) read motor pos and calculate RPM and countOf90ths/Sec
     'pinlow(TEST_PIN_SNS_LOOP)
     'pinlow(TEST_PIN_SNS_LP_ACTV)
 
     eStopCtr := 0
-    resetLtWindowAccumulator()
-    resetRtWindowAccumulator()
+    ltWheel.resetWindowAccumulators()
+    rtWheel.resetWindowAccumulators()
     priorLtStatus := priorRtStatus := -1
 
     repeat
-        ' if just starting up (or MOTOR FAULT), reset our tracker
-        if ltWheel.getDriverState() == DCS_FAULTED or ltWheel.getDriverState() == DCS_ESTOP or senseStartTicks == 0
-            resetLtWindowAccumulator()
+        ' if MOTOR FAULT or estop, reset our tracker
+        if ltWheel.getDriverState() == DCS_FAULTED or ltWheel.getDriverState() == DCS_ESTOP
+            ltWheel.resetWindowAccumulators()
 
-        if rtWheel.getDriverState() == DCS_FAULTED or rtWheel.getDriverState() == DCS_ESTOP or senseStartTicks == 0
-            resetRtWindowAccumulator()
+        if rtWheel.getDriverState() == DCS_FAULTED or rtWheel.getDriverState() == DCS_ESTOP
+            rtWheel.resetWindowAccumulators()
 
         showDriveStatesOnChange()
 
@@ -618,43 +588,27 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
         ' ------------------------------------------
         ' PROCESS left motor
         '
-        hallCntsIn8thSec := distanceIn90ths(ltWheel.getRawHallTicks(), LEFT_WHEEL)  ' Read the next sensor value
-        ltHallWindowSum -= LONG[@ltHallCountsWindow][ltHallWinIndex]            ' Remove the oldest entry from the sum
-        long [@ltHallCountsWindow][ltHallWinIndex] := hallCntsIn8thSec          ' place the newest reading into the window
-        ltHallWindowSum += hallCntsIn8thSec                                     ' Add the newest reading to the sum
-        ltHallWinIndex := (ltHallWinIndex + 1) +// HALL_WINDOW_SIZE             ' Increment the index, and wrap to 0 if it exceeds the window size
-        if ltHallWinEntryCt < HALL_WINDOW_SIZE                                  ' incr number of samples in sum until is window size
-            ltHallWinEntryCt++
+        HallTicks := ltWheel.updateWindowAccumulators()
 
-        ltPosTrkHallTicks += hallCntsIn8thSec
-
-        ltWheel.updateSenseData(hallCntsIn8thSec, ltHallWindowSum)
-
+        ltWheel.updateSenseData(HallTicks)
         ' ------------------------------------------
         ' PROCESS right motor
         '
-        hallCntsIn8thSec := distanceIn90ths(rtWheel.getRawHallTicks(), RIGHT_WHEEL)  ' Read the next sensor value
-        rtHallWindowSum -= LONG[@rtHallCountsWindow][rtHallWinIndex]            ' Remove the oldest entry from the sum
-        long [@rtHallCountsWindow][rtHallWinIndex] := hallCntsIn8thSec          ' place the newest reading into the window
-        rtHallWindowSum += hallCntsIn8thSec                                     ' Add the newest reading to the sum
-        rtHallWinIndex := (rtHallWinIndex + 1) +// HALL_WINDOW_SIZE             ' Increment the index, and wrap to 0 if it exceeds the window size
-        if rtHallWinEntryCt < HALL_WINDOW_SIZE                                  ' incr number of samples in sum until is window size
-            rtHallWinEntryCt++
+        HallTicks := rtWheel.updateWindowAccumulators()
 
-        rtPosTrkHallTicks += hallCntsIn8thSec
-
-        rtWheel.updateSenseData(hallCntsIn8thSec, rtHallWindowSum)
+        rtWheel.updateSenseData(HallTicks)
         ' ------------------------------------------
         ' EVALUATE any motor stop requests
 
         ' if user set time/distance to stop then stop if we are past the time or distance
+        ' if both time and distance is used, first check until time is passed and then check distance
         if motorStopMSecs > 0
             timeNow := getms()
             if timeNow > motorStopMSecs
                 stopMotors()
                 motorStopMSecs := 0 ' and clear user request
         elseif motorStopHallTicks > 0
-            if ltPosTrkHallTicks > motorStopHallTicks or rtPosTrkHallTicks > motorStopHallTicks
+            if ltWheel.getposTrkHallTicks() > motorStopHallTicks or rtWheel.getposTrkHallTicks() > motorStopHallTicks
                 stopMotors()
                 motorStopHallTicks := 0 ' and clear user request
         'pintoggle(TEST_PIN_SNS_LP_ACTV)    ' end of active side
@@ -827,15 +781,6 @@ PRI placeAsciiDigits(pStrBytes, byt) | hiNyb, lowNyb
 PRI MAX(a,b) : nMax
 ' return max of a or b
     nMax := (a > b) ? a : b
-
-PRI distanceIn90ths(newPos, bIsLeftWheel) : n90ths | priorPos
-    priorPos := (bIsLeftWheel) ? priorLtPos : priorRtPos
-
-    n90ths := abs(priorPos - newPos)
-    if bIsLeftWheel
-        priorLtPos := newPos
-    else
-        priorRtPos := newPos
 
 CON { --- HDMI Debug Support --- }
 

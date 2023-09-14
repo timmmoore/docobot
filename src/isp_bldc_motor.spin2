@@ -88,32 +88,6 @@ OBJ { objects / constants included by this object }
     user        :   "isp_bldc_motor_userconfig"     ' driver configuration
     distConv    :   "isp_dist_utils"                ' distance conversion utils
 
-CON { test pins for LA measurement }
-
-' -----------------------------------
-' Logic Analyzer Instrumentation Code
-' -----------------------------------
-{
-    ' PIN_40 - PIN_47 - general LA header
-    TEST_BASE_PIN = 40
-    TEST_ALL_PINS = TEST_BASE_PIN addpins 7
-    TEST_PIN_SENSE_LP = TEST_BASE_PIN + 0           ' LA ch0
-    TEST_PIN_DRIVE_LP = TEST_BASE_PIN + 1           ' LA ch1
-    TEST_PIN_MOTR_CTL_LP = TEST_BASE_PIN + 2        ' LA ch2
-    TEST_PIN_DRIVE_LP2 = TEST_BASE_PIN + 3          ' LA ch3
-    TEST_PIN_LP_TOGL = TEST_BASE_PIN + 4           ' LA ch4
-    TEST_PIN_UNKNOWN = TEST_BASE_PIN + 5           ' LA ch4
-'}
-{
-
-    ' PIN 48, 49 our rot/360 R/P Sensor
-    '   (Optical Rotary Encoder 360P/R)
-    TEST_BASE2_PIN = 48
-    TEST_ALL2_PINS = TEST_BASE2_PIN addpins 1
-    TEST_PIN_RP_SNS1 = TEST_BASE2_PIN + 0
-    TEST_PIN_RP_SNS2 = TEST_BASE2_PIN + 1
-'}
-
 DAT { misc time constants }
 
     ' time constants based on CPU freq
@@ -185,7 +159,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' set the mode now used by the driver to condition things (current-sense scaling, etc.)
     eDetectedBoard := getBoardType()
 
-    'bResetSenseData := FALSE
+    bResetSenseData := FALSE
 
     byte[@motorId] := 0                                 ' terminate an empty string
 
@@ -1181,51 +1155,133 @@ VAR { * sense buffer and stack arrays * }
     LONG    hallWinEntryCt
     LONG    hallCntsIn8thSec
     LONG    hallWindowSum
+
+    LONG    rSenseForBoard
+
+CON { test pins for LA measurement }
+' -----------------------------------
+' Logic Analyzer Instrumentation Code
+' -----------------------------------
+{
+    ' PIN_40 - PIN_47 - general LA header
+    TEST_BASE_PIN = 40
+    TEST_ALL_PINS = TEST_BASE_PIN addpins 7
+    TEST_PIN_SENSE_LP = TEST_BASE_PIN + 0           ' LA ch0
+    TEST_PIN_DRIVE_LP = TEST_BASE_PIN + 1           ' LA ch1
+    TEST_PIN_MOTR_CTL_LP = TEST_BASE_PIN + 2        ' LA ch2
+    TEST_PIN_DRIVE_LP2 = TEST_BASE_PIN + 3          ' LA ch3
+    TEST_PIN_LP_TOGL = TEST_BASE_PIN + 4           ' LA ch4
+    TEST_PIN_UNKNOWN = TEST_BASE_PIN + 5           ' LA ch4
+'}
+{
+    ' PIN 48, 49 our rot/360 R/P Sensor
+    '   (Optical Rotary Encoder 360P/R)
+    TEST_BASE2_PIN = 48
+    TEST_ALL2_PINS = TEST_BASE2_PIN addpins 1
+    TEST_PIN_RP_SNS1 = TEST_BASE2_PIN + 0
+    TEST_PIN_RP_SNS2 = TEST_BASE2_PIN + 1
+'}
+VAR
+{
+    LONG loopCtr
     ' summing 360 sensor values at 1 sec period
     LONG    r360CountsWindow[R360_WINDOW_SIZE]
     LONG    r360WinIndex
     LONG    r360WinEntryCt
     LONG    r360degrPerSec
     LONG    r360WindowSum
-    LONG    rSenseForBoard
+'}
 
-PRI resetWindowAccumulators()
-' reset our window accumulator data
-    longfill(@hallCountsWindow, 0, HALL_WINDOW_SIZE) ' zero our windowed accum
-    longfill(@r360CountsWindow, 0, R360_WINDOW_SIZE) ' zero our windowed accum
-    hallWinEntryCt := hallWindowSum := hallWinIndex := 0
-    r360WinEntryCt := r360WindowSum := r360WinIndex := 0
-    r360degrPerSec := hallCntsIn8thSec := 0
-
-PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loopCtr
-' TASK: every 1/8 Sec (8Hz) read motor posn and calculate RPM and countOf90ths/Sec
-
-    eStopCtr := tvMaxRpmIn10ths := tvMaxCntsInSec := tvMaxMmPerSec_x10 := tvMaxSenseI := 0
-    prioro8thSecPos := pos  ' reset by adopting current value
-    r360degrPerSec := tv360rpm_x10 := tv360rpm := 0
-    r360WinEntryCt := r360WindowSum := r360WinIndex := 0
-
-    ' -----------------------------------
-    ' Logic Analyzer Instrumentation Code
-    ' -----------------------------------
+PRI LAInit()
 {
+    LARESET()
     'pinlow(TEST_PIN_SENSE_LP)
 
     ' configure our R/P sensor pins
     pinfloat(TEST_ALL2_PINS)    ' set to inputs
     ' configure for quadrature A+B X=run continuous, reset Y
     pinstart(TEST_PIN_RP_SNS1, P_QUADRATURE | P_PLUS1_B, 0, 0)
-}
+'}
+
+PRI LAReset()
+{
+    longfill(@r360CountsWindow, 0, R360_WINDOW_SIZE) ' zero our windowed accum
+    r360WinEntryCt := r360WindowSum := r360WinIndex := 0
+    r360degrPerSec := 0
+'}
+
+PRI LALoop()
+{
+    pinhigh(TEST_PIN_SENSE_LP)
+    ' ------------------------------------------
+    ' Special 360 cts/Rotation Sensor Code
+    '   (Optical Rotary Encoder 360P/R)
+    ' https://www.amazon.com/Signswise-Incremental-Encoder-Dc5-24v-Voltage/dp/B00Y9KDDCY
+    ' ------------------------------------------
+    ' accum our fast & slow windowed values
+    if ++loopCtr +// SENSE_LOOP_HZ == 0             ' once every second compute slow cts in case we are slow
+        ' ---------------------------------------------------------------------------------
+        ' Capture 360 Sensor data
+        '
+        r360degrPerSec := abs(rqpin(TEST_PIN_RP_SNS1) sar 2)  ' divide by 4 to get degrees
+        'debug("MTR: ROT ", sdec(r360degrPerSec))
+        ' reset reader
+        pinfloat(TEST_PIN_RP_SNS1)    ' set to input
+        pinhigh(TEST_PIN_RP_SNS1)     ' set to output
+
+        r360WindowSum -= LONG[@r360CountsWindow][r360WinIndex]              ' Remove the oldest entry from the sum
+        long [@r360CountsWindow][r360WinIndex] := r360degrPerSec            ' place the newest reading into the window
+        r360WindowSum += r360degrPerSec                                     ' Add the newest reading to the sum
+        r360WinIndex := (r360WinIndex + 1) +// R360_WINDOW_SIZE             ' Increment the index, and wrap to 0 if it exceeds the window size
+        if r360WinEntryCt < R360_WINDOW_SIZE                                ' incr number of samples in sum until is window size
+            r360WinEntryCt++
+
+        tv360rpm_x10 := (r360degrPerSec * 60) / 36
+        tv360rpm := tv360rpm_x10 / 10
+'}
+
+PRI LALOOPEND()
+{
+    pinlow(TEST_PIN_SENSE_LP)
+'}
+
+PUB resetWindowAccumulators()
+' reset our window accumulator data
+    longfill(@hallCountsWindow, 0, HALL_WINDOW_SIZE) ' zero our windowed accum
+    hallWinEntryCt := hallWindowSum := hallWinIndex := 0
+    hallCntsIn8thSec := 0
+
+PUB updateWindowAccumulators() : retv
+    ' accum our windowed values
+    retv := absDistanceInTics(pos, prioro8thSecPos)                             ' Read the next sensor value
+    prioro8thSecPos := pos                                                      ' save prior
+    hallWindowSum -= LONG[@hallCountsWindow][hallWinIndex]                      ' Remove the oldest entry from the sum
+    long [@hallCountsWindow][hallWinIndex] := retv                              ' place the newest reading into the window
+    hallWindowSum += hallCntsIn8thSec                                           ' Add the newest reading to the sum
+    hallWinIndex := (hallWinIndex + 1) +// HALL_WINDOW_SIZE                     ' Increment the index, and wrap to 0 if it exceeds the window size
+    if hallWinEntryCt < HALL_WINDOW_SIZE                                        ' incr number of samples in sum until is window size
+        hallWinEntryCt++
+
+PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr
+' TASK: every 1/8 Sec (8Hz) read motor posn and calculate RPM and countOf90ths/Sec
+
+    eStopCtr := tvMaxRpmIn10ths := tvMaxCntsInSec := tvMaxMmPerSec_x10 := tvMaxSenseI := 0
+    prioro8thSecPos := pos  ' reset by adopting current value
+    tv360rpm_x10 := tv360rpm := 0
+    resetWindowAccumulators()                                                   ' used internally and by 2-wheel-steering
+
+    LAInit()
 
     repeat
-        loopCtr++
-        ' if just starting up (or MOTOR FAULT), reset our tracker
-        if drv_state == DCS_FAULTED or senseStartTicks == 0 or bResetSenseData
-            resetWindowAccumulators()
+        ' if MOTOR FAULT or reset our tracker
+        ' if we get this efault, motor is stopped but distance/time checks are still in place?
+        if drv_state == DCS_FAULTED or bResetSenseData
+            resetWindowAccumulators()                                           ' used internally and by 2-wheel-steering
+            LARESET()
             tvMaxFps_x10 := tvMaxMPH_x10 := tvMaxkPH_x10 := 0
             tvMaxRpmIn10ths := tvMaxCntsInSec := tvMaxMmPerSec_x10 := 0
             tv360rpm_x10 := tv360rpm := 0
-            prioro8thSecPos := pos  ' reset by adopting current value
+            prioro8thSecPos := pos                                              ' reset by adopting current value
             posTrkHallTicks := 0
             tvMaxSenseI := 0
             eStopCtr := 0
@@ -1234,57 +1290,15 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
 
         senseStartTicks := getct()
 
-    ' -----------------------------------
-    ' Logic Analyzer Instrumentation Code
-    ' -----------------------------------
-{
-        pinhigh(TEST_PIN_SENSE_LP)
-}
+        LALoop()
 
-        hallCntsIn8thSec := absDistanceInTics(pos, prioro8thSecPos) ' Read the next sensor value
-        prioro8thSecPos := pos                              ' save prior
+        hallCntsIn8thSec := updateWindowAccumulators()                          ' used internally and by 2-wheel-steering
 
-    ' ------------------------------------------
-    ' Special 360 cts/Rotation Sensor Code
-    '   (Optical Rotary Encoder 360P/R)
-    ' https://www.amazon.com/Signswise-Incremental-Encoder-Dc5-24v-Voltage/dp/B00Y9KDDCY
-    ' ------------------------------------------
-{
-        ' accum our fast & slow windowed values
-        if loopCtr +// SENSE_LOOP_HZ == 0             ' once every second compute slow cts in case we are slow
-            ' ---------------------------------------------------------------------------------
-            ' Capture 360 Sensor data
-            '
-            r360degrPerSec := abs(rqpin(TEST_PIN_RP_SNS1) sar 2)  ' divide by 4 to get degrees
-            'debug("MTR: ROT ", sdec(r360degrPerSec))
-            ' reset reader
-            pinfloat(TEST_PIN_RP_SNS1)    ' set to input
-            pinhigh(TEST_PIN_RP_SNS1)     ' set to output
-
-            r360WindowSum -= LONG[@r360CountsWindow][r360WinIndex]              ' Remove the oldest entry from the sum
-            long [@r360CountsWindow][r360WinIndex] := r360degrPerSec            ' place the newest reading into the window
-            r360WindowSum += r360degrPerSec                                     ' Add the newest reading to the sum
-            r360WinIndex := (r360WinIndex + 1) +// R360_WINDOW_SIZE             ' Increment the index, and wrap to 0 if it exceeds the window size
-            if r360WinEntryCt < R360_WINDOW_SIZE                                ' incr number of samples in sum until is window size
-                r360WinEntryCt++
-
-            tv360rpm_x10 := (r360degrPerSec * 60) / 36
-            tv360rpm := tv360rpm_x10 / 10
-            '
-            ' ---------------------------------------------------------------------------------
-}
-
-        ' accum our windowed values
-        hallWindowSum -= LONG[@hallCountsWindow][hallWinIndex]                  ' Remove the oldest entry from the sum
-        long [@hallCountsWindow][hallWinIndex] := hallCntsIn8thSec              ' place the newest reading into the window
-        hallWindowSum += hallCntsIn8thSec                                       ' Add the newest reading to the sum
-        hallWinIndex := (hallWinIndex + 1) +// HALL_WINDOW_SIZE                 ' Increment the index, and wrap to 0 if it exceeds the window size
-        if hallWinEntryCt < HALL_WINDOW_SIZE                                    ' incr number of samples in sum until is window size
-            hallWinEntryCt++
-
-        updateSenseData(hallCntsIn8thSec, hallWindowSum)                        ' used internally and by 2-wheel-steering
+        updateSenseData(hallCntsIn8thSec)                                       ' used internally and by 2-wheel-steering
 
         ' if user set time/distance to stop then stop if we are past the time or distance
+        ' if you set both distance and time, checks time only, stops motor but distance check is still in place
+        ' change to check both and reset both?
         if motorStopMSecs > 0
             timeNow := getms()
             if timeNow > motorStopMSecs
@@ -1308,20 +1322,18 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
             e_stop := FALSE
             eStopCtr := 0
 
-    ' -----------------------------------
-    ' Logic Analyzer Instrumentation Code
-    ' -----------------------------------
-{
-        pinlow(TEST_PIN_SENSE_LP)
-'}
+        LALOOPEND()
 
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
         '   wait remainder of 125 mSec before next sample
         waitct(senseStartTicks + ticks125ms)    ' wait to create "sense" time-base
 
-PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
+PUB getposTrkHallTicks() : retv
+    retv := posTrkHallTicks
 
-    cntsInSec := nHallWindowSum                                      ' moving sum
+PUB updateSenseData(nHallCntsIn8thSec)
+
+    cntsInSec := hallWindowSum                                                  ' moving sum
     posTrkHallTicks += nHallCntsIn8thSec
 
     tvRpm_x10 := ((cntsInSec * 60) * 10) / hallTicsPerRotation
@@ -1333,7 +1345,7 @@ PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
 
     tvMaxSenseI := max(sense_i_mV, tvMaxSenseI)
     ' power calcs
-    tv_mA := sense_i_mV/rSenseForBoard                                         ' in multiples of 0.1mA
+    tv_mA := sense_i_mV/rSenseForBoard                                          ' in multiples of 0.1mA
     tv_mW := round((float(tv_mA) *. fMotorVolts)/. F_SCALE_WATTS)               ' in mW
 
     if user.WHEEL_DIA_IN_INCH <> 0
@@ -1347,10 +1359,10 @@ PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
         kmh_x10 := distConv.mmps2kmh(mmPerSec_x10 * 10)
         mph_x10 := distConv.fps2mph(ftPerSec_x10)
 
-        'tvMaxMmPerSec_x10 := max(mmPerSec_x10, tvMaxMmPerSec_x10)
-        'tvMaxFps_x10 := max(ftPerSec_x10, tvMaxFps_x10)
-        'tvMaxMPH_x10 := max(mph_x10, tvMaxMPH_x10)
-        'tvMaxkPH_x10 := max(kmh_x10, tvMaxkPH_x10)
+        tvMaxMmPerSec_x10 := max(mmPerSec_x10, tvMaxMmPerSec_x10)
+        tvMaxFps_x10 := max(ftPerSec_x10, tvMaxFps_x10)
+        tvMaxMPH_x10 := max(mph_x10, tvMaxMPH_x10)
+        tvMaxkPH_x10 := max(kmh_x10, tvMaxkPH_x10)
 
 PRI max(a,b) : nMax
 ' return max of a or b
