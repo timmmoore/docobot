@@ -1,0 +1,16 @@
+
+
+caster 			https://www.amazon.com/dp/B0C4T8JW2Y
+convertor		https://www.amazon.com/dp/B09DGDJHYM
+battery			https://www.amazon.com/gp/product/B07SYNLFB5
+switch			https://www.fingertechrobotics.com/proddetail.php?prod=ft-mini-switch
+hub			https://www.fingertechrobotics.com/proddetail.php?prod=ft-twist-hubs - drilled to 5mm
+wheel			https://www.fingertechrobotics.com/proddetail.php?prod=ft-foam-wheels - 3", though 2.5 and 2.75 should work
+motor			2x https://www.parallax.com/product/motor-bldc-24v-4000-rpm/
+prop2			https://www.parallax.com/product/p2-edge-module-with-p2-edge-breakout-board-bundle/
+driver			2x https://www.parallax.com/product/universal-motor-driver-p2-add-on-board/
+rc receiver		https://www.amazon.com/gp/product/B074QHJRBC
+standoffs		M3 standoffs
+bolts			M3 for board, eboard to chassis, caster to caster mount, caster mount to chassis. M4 for motors to chassis
+zip ties		battery
+double side tape 	rc receiver
