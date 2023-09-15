@@ -13,12 +13,12 @@
 ''                              add frsky s.port (pin 54) telemetry
 ''                                send motor current telemetry
 ''                              add resistor divider and ADC
-''                                      22.2V input to 5V convertor
+''                                      11.1V (12.6-9.6) input to 5V convertor
 ''                                      |
-''                                      20K (19K93, 0.35%)
+''                                      8K1 ()
 ''                                      |______________
 ''                                      |              |
-''                                      3K(3K003 0.1%) |
+''                                      93K() |
 ''                                      |              |
 ''                                      gnd            48
 ''                                send battery voltage telemetry
@@ -57,12 +57,13 @@ CON { fixed io pins }
   SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
-  BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 27K + 8.2K -> 3.18 = 12.6 * 9.1/(27+9.1)
+
+  BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 8.2K + 3K -> 3.18 = 12.6 * 3.0/(8.2+3.0)
   BATTERY_LOW                   = 0
-  BATTERY_HIGH                  = 31762                         ' 27K + 9K1 resistor divider, max voltage is 12.6V * 9100/36100 -> 3.1762
-  BATTERY_DIVIDER               = 2520.8                        ' value that makes reading match meter, battery max is 4.2V per cell (total 12.6V)
-  BATTERY_MINIMUM               = 9.6                           ' minimum voltage, battery min is 3.2V per cell (total 9.6V)
-  BATTERY_STOP                  = false 'true                          ' shutdown if min battery reached
+  BATTERY_HIGH                  = 33790                         ' 8K2(8K05) + 3K(2K95) resistor divider, max voltage is 12.6V * 2950/11000 -> 3.379
+  BATTERY_DIVIDER               = 2681.746                      ' 33790/2681.746 -> 12.6, absolute max is 4.2V per cell (total 12.6V)
+  BATTERY_MINIMUM               = 9.9                           ' minimum voltage, absolute min is 3.2V per cell (total 9.6V)
+  BATTERY_STOP                  = false 'true                   ' shutdown if min battery reached
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
   MOTOROFFONIGNOREJOYSTICK      = true                          ' stop bot on ignore joystick
