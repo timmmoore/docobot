@@ -13,8 +13,8 @@
 ''   Updated.... 15 Sept 2023 (timmoore)
 ''                              refactor taskPostionSense to allow isp_steering_2wheel to use more functionality
 ''   Updated.... 16 Sept 2023 (timmoore)
-''                              invert doco4k max/min fwd.rev incr values
-''                              stop doco4k efaults
+''                              invert doco4k max/min fwd/rev incr values
+''                              stop doco4k efaults - invert ofsdegr
 ''
 '' =================================================================================================
 
