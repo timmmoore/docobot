@@ -12,6 +12,9 @@
 ''                              allow any motor to have WHEEL_DIA_IN_INCH set in userconfig
 ''   Updated.... 15 Sept 2023 (timmoore)
 ''                              refactor taskPostionSense to allow isp_steering_2wheel to use more functionality
+''   Updated.... 16 Sept 2023 (timmoore)
+''                              invert doco4k max/min fwd.rev incr values
+''                              stop doco4k efaults
 ''
 '' =================================================================================================
 
@@ -815,8 +818,8 @@ PRI offsetsForMotor(eMotorType) : fwdDegrees, revDegrees | ofsDegr, index
         else
           if (ofsDegr := lookup(index: 52, 53, 53, 53, 54, 54, 53)) == 0
               ofsDegr := 53
-        fwdDegrees := 360 - ofsDegr                 ' 0 is bad > 2A!
-        revDegrees := ofsDegr                       ' vs. using 360?
+        fwdDegrees := ofsDegr                           ' 0 is bad > 2A!
+        revDegrees := 360 - ofsDegr                     ' vs. using 360?
       other:
         ' 4 degrees per tic, offset was actually 5 tics! or 20 degrees (0.0556 of rotation)
         ' from characterization at 18v5:
