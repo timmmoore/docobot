@@ -230,6 +230,7 @@ PUB stopAfterRotation(nRotationCount, eRotationUnits) | degreesPerTic, ticsPerRo
         other:
             debug("! ERROR: invalid rotationUnits Value:", udec_long(eRotationUnits))
             abort
+    debug(" stopAfterRotation: ", udec(nRotationCount), " ", udec(degreesPerTic), " ", udec(ticsPerRotation), " ", udec(motorStopHallTicks))
 
 
 '' Stops both motors, after either of the motors reaches {distance} specified in {distanceUnits} [DDU_IN or DDU_MM].
@@ -613,9 +614,11 @@ PRI taskPostionSense() | senseStartTicks, eStopState
         if motorStopMSecs > 0 and (getms() > motorStopMSecs)
             stopMotors()
             motorStopMSecs := 0                                                 ' and clear user request
-        elseif motorStopHallTicks > 0 and (ltWheel.getposTrkHallTicks() > motorStopHallTicks or rtWheel.getposTrkHallTicks() > motorStopHallTicks)
-            stopMotors()
-            motorStopHallTicks := 0                                             ' and clear user request
+        elseif motorStopHallTicks > 0
+            'debug(" taskPostionSense: ", udec(motorStopHallTicks), " ", udec(ltWheel.getposTrkHallTicks()), " ", udec(rtWheel.getposTrkHallTicks()))
+            if (ltWheel.getposTrkHallTicks() > motorStopHallTicks or rtWheel.getposTrkHallTicks() > motorStopHallTicks)
+                stopMotors()
+                motorStopHallTicks := 0                                             ' and clear user request
 
         LALOOPEND()
         ' ------------------------------------------
