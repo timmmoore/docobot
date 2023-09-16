@@ -25,7 +25,7 @@
 ''                              stop motors and shutdown if min battery reached
 ''   Updated.... 4 Sept 2023 (timmoore)
 ''                              force speed to 0 when joysticks are disabled
-''                              add deadband to speed, if very slow bot jerks, so have a minimum speed
+''                              add deadband to speed
 ''   Updated.... 8 Sept 2023 (timmoore)
 ''                              connect VRA to setAcceleration
 ''   Updated.... 15 Sept 2023 (timmoore)
@@ -66,7 +66,7 @@ CON { fixed io pins }
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
-  MOTOROFFONIGNOREJOYSTICK      = true                          ' stop bot on ignore joystick
+  MOTOROFFONIGNOREJOYSTICK      = true                          ' disable motor if joystick ignore switch is set
 
 OBJ { our Drive Subsystem }
 
@@ -389,7 +389,7 @@ CON { license }
  -------------------------------------------------------------------------------------------------
   MIT License
 
-  Copyright (c) 2022 Iron Sheep Productions, LLC
+  Copyright (c) 2023 Iron Sheep Productions, LLC
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
