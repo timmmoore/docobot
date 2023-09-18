@@ -8,6 +8,8 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Feb 2022
 ''   Updated.... 21 Jul 2022
+''   Updared.... 16 Sep 2023
+''                              Drop sense task to 50ms to try improve accuracy
 ''
 '' =================================================================================================
 CON { forward our interface constants }
@@ -96,7 +98,7 @@ PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMo
 '' Start our drive cogs connected to our left and right motor control pin-sets
     ticks1ms   := (clkfreq / 1_000)
     ticks1us   := (clkfreq / 1_000_000)
-    ticks125ms := ticks1ms * 125
+    ticks50ms  := ticks1ms * 50
 
     ' iff HDMI is needed, then we need this!
     'if clkfreq <> 270_000_000
@@ -512,14 +514,11 @@ CON { -- TASK position tracking -- }
 
     STACK_SIZE_LONGS = 64 ' WARNING! we exceed stack at 48!
 
-    ' at 125 ms
-    SENSE_LOOP_HZ = 8
-
 VAR { time values & arrays }
 
     long    ticks1ms
     long    ticks1us
-    long    ticks125ms
+    long    ticks50ms
 
     long    senseCog
 
@@ -632,8 +631,8 @@ PRI taskPostionSense() | senseStartTicks, eStopState
         deltaTicks := getct() - senseStartTicks
 
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
-        '   wait remainder of 125 mSec before next sample
-        waitct(senseStartTicks + ticks125ms)    ' wait to create "sense" time-base
+        '   wait remainder of 50 mSec before next sample
+        waitct(senseStartTicks + ticks50ms)                                     ' wait to create "sense" time-base
 
 PRI isEmergency() : bEmergencyState
 ' return T/F where T means one or both wheels are in emergency cutoff state

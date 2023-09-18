@@ -67,7 +67,7 @@ DAT { misc time constants }
     ticks1ms    LONG    0
     ticks1us    LONG    0
     ticks500us  long    0                       ' 2 kHz
-    ticks125ms  long    0                       ' 8 Hz
+    ticks50ms   long    0                       ' 20 Hz
 
 PUB null()
 
@@ -120,7 +120,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ticks1ms   := (CLKFREQ / 1_000)
     ticks1us   := (CLKFREQ / 1_000_000)
     ticks500us := (ticks1ms * 500) / 1_000  ' phrased this way for better result
-    ticks125ms := ticks1ms * 125
+    ticks50ms  := ticks1ms * 50
 
     ' set up debug variables
     useDebug := FALSE
@@ -321,7 +321,7 @@ PUB holdAtStop(bEnable)
 PUB resetTracking()
 '' Resets the position tracking values returned by getDistance() and getRotations()
     posTrkHallTicks := 0    ' reset all of our trackers (they are incremented in sensor loop)
-    waitms(200) ' values will clear in 125ms
+    waitms(200) ' values will clear in 50ms
 
 PUB moveShaftToAngle(desiredAngle)
 '' TEST: force motor to specific angle
@@ -748,7 +748,7 @@ PUB testResetFault() | bDidFault
 PUB testResetMaxValues()
 '' TESTING USE: reset our fault indicator that we tripped during test
     bResetSenseData := TRUE
-    waitms(200) ' values should clear in 125ms
+    waitms(200) ' values should clear in 50ms
 
 
 CON ' --- PRIVATE (Utility) Methods ---
@@ -1098,8 +1098,8 @@ PUB getDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVar
 CON ' -- TASK: position tracking --
 
 ' Sense Constants
-    ' at 125 ms
-    SENSE_LOOP_HZ = 8
+    ' at 50 ms
+    SENSE_LOOP_HZ = 20 '8
     ' at 31.25 ms
     'SENSE_LOOP_HZ = 32
     ' at 15.625 ms
@@ -1242,7 +1242,7 @@ PUB updateWindowAccumulators() | nHallCntsIn8thSec
     updateHdmiData()
 
 PRI taskPostionSense() | senseStartTicks, eStopState
-' TASK: every 1/8 Sec (8Hz) read motor posn and calculate RPM and countOf90ths/Sec
+' TASK: every 50ms (20Hz) read motor posn and calculate RPM and countOf90ths/Sec
 
     eStopState := false
     resetWindowAccumulators()                                                   ' used internally and by 2-wheel-steering
@@ -1291,8 +1291,8 @@ PRI taskPostionSense() | senseStartTicks, eStopState
         deltaTicks := getct() - senseStartTicks
 
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
-        '   wait remainder of 125 mSec before next sample
-        waitct(senseStartTicks + ticks125ms)    ' wait to create "sense" time-base
+        '   wait remainder of 50 mSec before next sample
+        waitct(senseStartTicks + ticks50ms)                                     ' wait to create "sense" time-base
 
 PUB getposTrkHallTicks() : retv
     retv := posTrkHallTicks
