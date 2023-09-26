@@ -303,8 +303,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
 
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
         telemetry.setcurrent(nLtmAmps, nRtmAmps)
-        'if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
-        if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
+        if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
             bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
         'debug("--> Battery Voltage ", fdec(fvoltage), fdec(BATTERY_MINIMUM))
