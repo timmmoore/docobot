@@ -147,7 +147,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
 
         'utilities.sigmoidtest()
 
-        if TRAINING
+        if TRAINING                                                             ' train the nn model
           nntraining.train_nn()
           repeat
             waitms(1000)
@@ -156,7 +156,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
           debug(" Neural Network size mis-match")
 
         ' run the tests for the nn
-        if TESTTRAINING
+        if TESTTRAINING                                                         ' run tests on the nn model
           nn.test_nn()
           repeat
             waitms(1000)
