@@ -129,6 +129,7 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index, t5index
         fHiddenDelta[i] := fAccum *. utilities.sigmoidDer(fHidden[i])           ' gradient/derivative for sigmoid
         t1index += OutputNodes
 
+        ' change is a combination of current gradient (*learning rate) and previous gradients (*momentum)
         fChangeHiddenWeights[t3index+i] := long[@fLearningRate] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t3index+i]
         fHiddenWeights[t3index+i] := fHiddenWeights[t3index+i] +. fChangeHiddenWeights[t3index+i]
         t5index := i
@@ -139,14 +140,13 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index, t5index
           t5index += HiddenNodes
 
       repeat OutputNodes with i
-                                                                                ' update to output bias
+        ' change is a combination of current gradient (*learning rate) and previous gradients (*momentum)
         fChangeOutputWeights[t4index+i] := long[@fLearningRate] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t4index+i]
-        fOutputWeights[t4index+i] := fOutputWeights[t4index+i] +. fChangeOutputWeights[t4index+i]
+        fOutputWeights[t4index+i] := fOutputWeights[t4index+i] +. fChangeOutputWeights[t4index+i] ' update to output bias
         t1index := i
         repeat HiddenNodes with j
-                                                                                ' update to output weights
           fChangeOutputWeights[t1index] := long[@fLearningRate] *. fHidden[j] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t1index]
-          fOutputWeights[t1index] := fOutputWeights[t1index] +. fChangeOutputWeights[t1index]
+          fOutputWeights[t1index] := fOutputWeights[t1index] +. fChangeOutputWeights[t1index] ' update to output weights
           t1index += OutputNodes
 
     ifnot TrainingCycle&3
