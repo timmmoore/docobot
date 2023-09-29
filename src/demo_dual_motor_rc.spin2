@@ -30,6 +30,10 @@
 ''                              connect VRA to setAcceleration
 ''   Updated.... 15 Sept 2023 (timmoore)
 ''                              add switch that moves bot 1 rotation forward, testing degree/distance with doco4k motors
+''   Updated.... 17 Sept 2023 (timmoore)
+''                              add support for RPLidar A1M8 and IMU
+''   Updated.... 20 Sept 2023 (timmoore)
+''                              add support for autonomous roaming using neural network
 ''
 '' =================================================================================================
 
@@ -40,6 +44,7 @@ CON { timing }
 
 CON {debug}
   DEBUG_LOG_SIZE = 500_000
+  DEBUG_COGS     = %1111_0001                                   ' disable debug for motor cogs
 
 CON { fixed io pins }
 
@@ -51,36 +56,58 @@ CON { fixed io pins }
   SF_SDO   = 59  { O }
   SF_SDI   = 58  { I }
 
-  'LA_CHAN0 = 56  { O }                                          ' logic analyzer
-  'LA_CHAN1 = 57  { O }
-
   SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
-
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 8.2K + 3K -> 3.18 = 12.6 * 3.0/(8.2+3.0)
-  BATTERY_LOW                   = 0
-  BATTERY_HIGH                  = 33790                         ' 8K2(8K05) + 3K(2K95) resistor divider, max voltage is 12.6V * 2950/11000 -> 3.379
-  BATTERY_DIVIDER               = 2681.746                      ' 33790/2681.746 -> 12.6, absolute max is 4.2V per cell (total 12.6V)
-  BATTERY_MINIMUM               = 9.9                           ' minimum voltage, absolute min is 3.2V per cell (total 9.6V)
-  BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
   MOTOROFFONIGNOREJOYSTICK      = true                          ' disable motor if joystick ignore switch is set
 
+  LIDARTX                       = 1                             ' tx to lidar
+  LIDARRX                       = 0                             ' rx to lidar
+  LIDARCTL                      = 2                             ' motor control for lidar
+
+  ' USFSMAX_VCC = 3.3V
+  ' USFSMAX_GND
+  USFSMAX_SDA                   = 9                             ' i2c pins for IMU
+  USFSMAX_SCL                   = 8                             ' CLK speed of 3Mhz
+  USFSMAX_RESET                 = -1                            ' reset pin is optional
+
+  ' Bellevue, WA 98008
+  M_V                           = 49.4643
+  M_H                           = 19.0285
+  MAG_DECLINIATION              = 15.2473
+  QUAT_DIV                      = $07
+
+  PITCH                         = 0
+  ROLL                          = 1
+  YAW                           = 2
+  PRESSURE                      = 3
+
+  TESTTRAINING                  = false 'true                  ' run tests on the trained model
+  TRAINING                      = false 'true                  ' use training data to generate model weights
+
 OBJ { our Drive Subsystem }
 
-                                                    ' 1 cog, total -> 6 cogs
-    user        : "isp_bldc_motor_userconfig"       ' driver configuration
-    wheels      : "isp_steering_2wheel"             ' the dual-drive BLDC motors, 1 cog per motor, 1 sense cog -> 3 cogs
-    remoteCtl   : "isp_flysky_rx"                   ' the FlySky Transmitter, 1 cog
-    battery     : "jm_ez_analog"                    ' A2D to read battery voltage
-    telemetry   : "frskysport"                      ' bidirectional serial port to RC receiver for telemetry, 1 cog
+                                                        ' 1 cog, total -> 7 cogs
+    user        : "isp_bldc_motor_userconfig"           ' driver configuration
+    wheels      : "isp_steering_2wheel"                 ' the dual-drive BLDC motors, 1 cog per motor, 1 sense cog -> 3 cogs
+    remoteCtl   : "isp_flysky_rx"                       ' the FlySky Transmitter, 1 cog
+    bconfig     : "batteryconfig"                       ' battery configuration
+    battery     : "jm_ez_analog"                        ' A2D to read battery voltage
+    telemetry   : "frskysport"                          ' bidirectional serial port to RC receiver for telemetry, 1 cog
+    lidar       : "rplidar"                             ' rplidar A1M8, 1 cog
+    imu         : "usfsmax"                             ' imu
+    nn          : "nn_drive"                            ' neural network auto drive
+    nntraining  : "nn_training"                         ' training for above neutral network
+    utilities   : "utilities"
 
 VAR
-    long    remoteCog, telemetryCog
+    long    remoteCog, telemetryCog, lidarCog
+    long    usfsavailable
 
-PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt
+PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt
 '' DEMO Driving a two wheeled platform
 
     debug("* demo dual motor control via R/C")
@@ -114,12 +141,33 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
 
         debug("* Set up - remote control")
 
-        battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
-        remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
-        telemetryCog := telemetry.start(SPORT_BI)
+        battery.start(BATTERY_ANALOG, BCONFIG.BATTERY_LOW, BCONFIG.BATTERY_HIGH)
+        usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
+        debug(if(usfsavailable), "IMU start error: ", uhex(usfsavailable))
+
+        'utilities.sigmoidtest()
+
+        if TRAINING
+          nntraining.train_nn()
+          repeat
+            waitms(1000)
+
+        if nn.start() <> 0
+          debug(" Neural Network size mis-match")
+
+        ' run the tests for the nn
+        if TESTTRAINING
+          nn.test_nn()
+          repeat
+            waitms(1000)
+
+        remoteCog := remoteCtl.starttx(SBUS_RX, @Defaults, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
+        telemetryCog := telemetry.startEx(SPORT_BI, @_sensors, _sensorCount)
+        lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
         statusOK := remoteCog <> 0 ? TRUE : FALSE
         status1Ok := telemetryCog <> 0 ? TRUE : FALSE
-        if statusOK and status1Ok
+        status2Ok := lidarCog <> 0 ? TRUE : FALSE
+        if statusOK and status1Ok and status2Ok
             'remoteCtl.manualCalibrate()
             debug("R/C Running...")
             remoteControlMotor()
@@ -128,7 +176,11 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
               debug("EEEE: SBUS rcvr not started?!")
             if status1OK == false
               debug("EEEE: SPORT not started?!")
+            if status2OK == false
+              debug("EEEE: LIDAR not started?!")
 
+        lidar.stop()
+        ' turn off lidar
         telemetry.stop()
         ' turn off our SBUS drivers
         remoteCtl.stop()
@@ -191,8 +243,13 @@ VAR
     long    bLastShowDriveStates
     long    nAccelerationRate
     long    nDoingOneRotation
+    long    nDoingAutoRoam
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate, bOneRotation
+    long    osensor[4]
+    long    qt[4]
+    long    fvoltage
+
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, bMinBattery, finalupdate, accrate, bOneRotation, bAutoRoam, rngMin, rngMax
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -207,7 +264,9 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
     debug("* swC DN     - end control")
     debug("* swD DN     - emer cutoff")
     debug("* swE DN     - 1 rotation")
+    debug("* swH DN     - autonomous")
     debug("* VRA        - acceleration")
+    debug("* VRB        - autoroam speed")
     debug("------")
 
     bLastShowState := VALUE_NOT_SET                     ' value can't happen
@@ -234,8 +293,13 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
         remoteCtl.showDebug(FALSE)
 
         bOneRotation := remoteCtl.swIsOn(remoteCtl.CH_11)
+        bAutoRoam := remoteCtl.swIsOn(remoteCtl.CH_12)
+        accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)
+        rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_VRA)
+        accrate := map(accrate, rngMin, rngMax, 10, 200)
 
-        accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)/10
+        updatelidar()
+        updatetelemetry()
 
         if bLastShowDriveStates <> bShowDriveStates
             debug("- sho ", sdec_long_(bShowDriveStates))
@@ -243,7 +307,6 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 wheels.showDriveStates()
             bLastShowDriveStates := bShowDriveStates
 
-        nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
         if bShowState <> bLastShowState
             if bShowState
                 debug("  ltmA=", sdec_(nLtmAmps/10), ".", sdec_(nLtmAmps//10), ", rtmA=", sdec_(nRtmAmps/10), ".", sdec_(nRtmAmps//10))
@@ -300,12 +363,14 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 doOneRotation()
             elseif bOneRotation == true and nDoingOneRotation == true           ' switch must be reset before allowed again
                 nDoingOneRotation := false
+            elseif bAutoRoam == false and nDoingAutoRoam == false               ' no emergency cutoff and no joystick before accept autoroam
+                nDoingAutoRoam := true
+                doAutoRoam()
+                nDoingAutoRoam := false
 
-        telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
-        telemetry.setcurrent(nLtmAmps, nRtmAmps)
-        if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
+        if fvoltage <. BCONFIG.BATTERY_MINIMUM                                  '
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
-            bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
+            bMinBattery := BCONFIG.BATTERY_STOP                                 ' trigger emergency stop and quit the loop
         'debug("--> Battery Voltage ", fdec(fvoltage), fdec(BATTERY_MINIMUM))
 
         if bDoneTesting
@@ -329,6 +394,72 @@ PRI doOneRotation() | ltdegree, rtdegree
     waitms(1000)
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
     debug("  Onrotation Check:", sdec(ltdegree), " ", sdec(rtdegree))
+
+PRI updatetelemetry() | index, tlidar[NOLIDAR]
+' update telemetry
+    if usfsavailable == 0
+        _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                           ' get yaw direction from imu
+        osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
+        telemetry.setimu(osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE]) ' imu telemetry
+        'debug("usfs ", fdec(osensor[YAW]), " ", fdec(osensor[PITCH]), " ", fdec(osensor[ROLL]), " ", fdec(osensor[PRESSURE]))
+    telemetry.setvoltage(fvoltage := (float(battery.read())/.BCONFIG.BATTERY_DIVIDER)) ' battery voltage telemetry
+    nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
+    telemetry.setcurrent(nLtmAmps, nRtmAmps)                                    ' current
+    repeat NOLIDAR with index                                                   ' convert to mm for telemetry
+      tlidar[index] := round((1.0 -. flidarmeas[index]) *. float(MAXDISTANCE-MINDISTANCE)) + MINDISTANCE
+    telemetry.setlidar(@tlidar)
+
+PRI updatelidar()
+  flidarmeas[0] := lidar.checkdistance(LEFT2ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left
+  flidarmeas[1] := lidar.checkdistance(LEFT1ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left front
+  flidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' front
+  flidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right front
+  flidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right
+
+CON
+  ' LIDAR measurements
+  NOLIDAR       = 5
+  FRONTANGLE    = 0                                                             ' angle to front
+  LEFT1ANGLE    = 45                                                            ' angle to left
+  LEFT2ANGLE    = 90                                                            ' angle to left
+  RIGHT1ANGLE   = 315                                                           ' angle to right
+  RIGHT2ANGLE   = 270                                                           ' angle to right
+  DELTAANGLE    = 23                                                            ' +- angle when checking distance
+  MINDISTANCE   = 150                                                           ' min distance in mm, 150mm is min lidar can do
+  MAXDISTANCE   = 800
+  NNSPEEDRATIO  = 2                                                             ' ratio to slowdown bot
+
+VAR
+  long flidarmeas[NOLIDAR]
+
+PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent, speeddiv, rngMin, rngMax, pdisp
+
+  ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+  updatelidar()
+  updatetelemetry()
+  debug("  AutoRoam Starting: Yaw:", fdec_(osensor[YAW]), " ltticks:", sdec_(ltcurrent), " rtticks:", sdec_(rtcurrent))
+
+  repeat
+    speeddiv := remoteCtl.readchannel(remoteCtl.CTL_VRB)
+    rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_VRB)
+    speeddiv := map(speeddiv, rngMin, rngMax, 10, 1)                                                    ' want to go faster if VRB is larger
+    pdisp := nn.updatedisplaylidar(@flidarmeas)
+    'debug("  AutoRoam1: (", zstr_(pdisp), ") ", fdec_(flidarmeas[0]), " ", fdec_(flidarmeas[1]), " ", fdec_(flidarmeas[2]), " ", fdec_(flidarmeas[3]), " ", fdec_(flidarmeas[4]))
+    updatelidar()
+    updatetelemetry()
+
+    ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+    nn.drive_nn(@flidarmeas, @ltmotor)                                          ' give lidar readings to nn, get left/right motor power
+    debug("  AutoRoam: (", zstr_(pdisp), ") ", sdec(ltmotor), " ", sdec(rtmotor), " ", sdec(speeddiv), " Yaw:", fdec_(osensor[YAW]), " ltticks:", sdec_(ltcurrent), " rtticks:", sdec_(rtcurrent))
+    ltmotor /= speeddiv                                                         ' reduce motor speeds by VRB speed divider
+    rtmotor /= speeddiv
+    wheels.driveAtPower(ltmotor, rtmotor)
+    waitms(100)                                                                 ' let bot move
+  while remoteCtl.swIsOn(remoteCtl.CH_12) == false                              ' done?
+
+  wheels.driveDirection(0, 0)                                                   ' stop bot before leaving autoroam
+  ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+  debug("  AutoRoam Done: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
 
 PRI updPosnBothJoy(): speed, direction | rawSpeed, rawDirection, rngMin, rngMax
     ' route Rt Joystick Vt (spring center) to FWD/REV (speed)
@@ -368,20 +499,46 @@ PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
     The map() function uses integer math so will not generate fractions, when the math might indicate that
     it should do so. Fractional remainders are truncated, and are not rounded or averaged.
 }
-    if (inValue <= inMin)
-        outValue := outMin
-    elseif (inValue >= inMax)
-        outValue :=  outMax
-    else
-        outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
+  inValue := inMin #> inValue <# inMax
+  outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
 
 DAT
 '' rc transmitter configuration
-    ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
-    ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
-    validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CTL_NADA
+    ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
+    ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
+    Defaults        word    1023, 1023,    0, 1023,    0,    0,    0,    0,    0
+                    word       0,    0,    0, 1023, 1023, 1023, 1023,    0,    0
+    validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CH_12, remoteCtl.CTL_NADA
     valid3Ways      byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CTL_NADA
 
+  ' usfsmax configuration
+  Config
+                LONG M_V
+                LONG M_H
+                LONG MAG_DECLINIATION
+                byte QUAT_DIV, 0, 0, 0
+'
+  ' yaw offset for usfsmax to front bot in 0-360.0 degrees
+  yawoffset     long    1.0
+
+' maximum of 25 sensors
+_sensorCount  long      (@_sensorsend - @_sensors)/(2*telemetry._sensornoentries) ' count of info, not count of sensors
+'                       physical id            sensor id     subindex  delay(ms)
+_sensors
+              word  telemetry.DATA_ID_ACC, telemetry.FSSP_DATAID_HEADING,     0,   1000     ' $0840, in deg *100
+              word  telemetry.DATA_ID_ACC, telemetry.FSSP_DATAID_PITCH,       0,   1000     ' $5230, given in deg *10
+              word  telemetry.DATA_ID_ACC, telemetry.FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
+              word  telemetry.DATA_ID_ACC, telemetry.SENSOR_APPL_ID_PRESSURE, 0,   1000     ' $5113, hPa *100
+              word  telemetry.DATA_ID_FAS, telemetry.FSSP_DATAID_VFAS,        0,   1000     ' $0210, given in 0.01V *100
+              word  telemetry.DATA_ID_FAS, telemetry.FSSP_DATAID_CURRENT1,    0,   1000     ' $0201, in 0.1mA
+              word  telemetry.DATA_ID_FAS, telemetry.FSSP_DATAID_CURRENT2,    0,   1000     ' $0202, in 0.1mA
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARL,           0,    500     ' $5104, lidar L
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARFL,          0,    500     ' $5105, lidar FL
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARF,           0,    500     ' $5106, lidar F
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARFR,          0,    500     ' $5107, lidar FR
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARR,           0,    500     ' $5108, lidar R
+_sensorsend
+'
 CON { license }
 {{
 

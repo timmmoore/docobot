@@ -1,0 +1,196 @@
+{
+Neural Network
+  port of
+        http://robotics.hobbizine.com/arduinoann.html
+
+  provides training capability for nn_drive
+  but recommend use
+          https://github.com/timmoore/propbot/trainer
+}
+
+CON
+PatternCount    = 6
+InputNodes      = 5
+HiddenNodes     = 6
+OutputNodes     = 2
+
+OBJ
+  utilities   : "utilities"
+
+DAT
+fLearningRate            long 0.5                                               ' how much to follow the gradient
+fMomentum                long 0.9                                               ' how much to keep the current weights
+fInitialWeightMax        long 0.5                                               ' adjustment ot random for initial weights
+fSuccess                 long 0.0001                                            ' MSE error < this to complete
+
+fInput {[PatternCount][InputNodes]}
+  long 0.0, 0.0, 0.0, 0.0, 0.0
+  long 1.0, 1.0, 1.0, 1.0, 1.0
+  long 0.0, 0.0, 1.0, 0.0, 0.0
+  long 0.0, 1.0, 1.0, 1.0, 0.0
+  long 0.5, 0.5, 0.5, 0.5, 0.5
+  long 0.0, 0.0, 0.5, 0.0, 0.0
+
+fTarget {[PatternCount][OutputNodes]}
+  long 1.0, 1.0
+  long 0.0, 0.0
+  long 0.6, 0.7
+  long 0.8, 0.2
+  long 0.6, 0.6
+  long 0.5, 0.6
+
+VAR
+  long fError                                                                   ' MSE
+
+  long start                                                                    ' start time of training
+  long fAccum                                                                   ' general sum
+  long p, q                                                                     ' training data indexes
+  long TrainingCycle                                                            ' number of times round the training cycle
+
+  long RandomizedIndex[PatternCount]                                            ' random order of training data
+
+  long fHiddenDelta[HiddenNodes]                                                ' gradient for hidden weights
+
+  long fOutputDelta[OutputNodes]                                                ' gradient for output weights
+
+  long fHiddenWeights[(InputNodes + 1)*HiddenNodes]                             ' current hidden weights
+  long fChangeHiddenWeights[(InputNodes + 1)*HiddenNodes]                       ' change to hidden weights, calculated using gradient
+
+  long fOutputWeights[(HiddenNodes + 1)*OutputNodes]                            ' current output weights
+  long fChangeOutputWeights[(HiddenNodes + 1)*OutputNodes]                      ' change to output weights, calculated using gradient
+
+  long fOutput[OutputNodes]                                                     ' current output node values
+  long fHidden[HiddenNodes]                                                     ' current hidden node values
+
+pub null()
+
+pri rand(r) : result
+  case r
+    16:                                                                         ' optimize for a couple of cases
+      result := getrnd() & $0f
+    128:
+      result := getrnd() & $7f
+    other:                                                                      ' and handle the rest
+      result := getrnd() +// r
+
+pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index, t5index
+' trains the network
+  debug("Start training ", sdec(HiddenNodes), " ", sdec(InputNodes))
+
+  debug(`SCOPE_XY MyXY SIZE 160 COLOR black black RANGE 80_000 SAMPLES 0 'MSE') ' plot MSE for each training cycle
+
+  repeat PatternCount with p                                                    ' training data index
+    RandomizedIndex[p] := p
+
+  repeat HiddenNodes with i                                                     ' Initialize HiddenWeights and ChangeHiddenWeights
+    tindex := i
+    repeat InputNodes+1 with j
+      fChangeHiddenWeights[tindex] := 0.0
+      fHiddenWeights[tindex] := float(rand(128)-64) /. 64.0 *. long[@fInitialWeightMax]
+      tindex += HiddenNodes
+
+  repeat OutputNodes with i                                                     ' Initialize OutputWeights and ChangeOutputWeights
+    tindex := i
+    repeat HiddenNodes+1 with j
+      fChangeOutputWeights[tindex] := 0.0
+      fOutputWeights[tindex] := float(rand(128)-64) /. 64.0 *. long[@fInitialWeightMax]
+      tindex += OutputNodes
+
+  start := getms()
+  t3index := InputNodes*HiddenNodes                                             ' Compute hidden layer activations
+  t4index := HiddenNodes*OutputNodes                                            ' Compute output layer activations and calculate errors
+  repeat TrainingCycle from 1 to POSX-1                                         ' Begin training, approx. 4.3ms per loop
+
+    repeat PatternCount with p                                                  ' Randomize order of training data
+      q := rand(PatternCount)
+      RandomizedIndex[p], RandomizedIndex[q] := RandomizedIndex[q], RandomizedIndex[p]
+
+    fError := 0.0
+    repeat PatternCount with q                                                  ' Cycle through each training pattern in the randomized order
+      p := RandomizedIndex[q]
+
+      tindex := InputNodes*p                                                    ' precompute array offset into training data
+      t2index := OutputNodes*p                                                  ' precompute array offset into output data
+      repeat HiddenNodes with i
+        fHidden[i] := utilities.sigmoid(utilities.SumMultiply(long[@fHiddenWeights][t3index+i], i, @long[@fInput][tindex], @fHiddenWeights, InputNodes, HiddenNodes))                                 ' total per output node, curve flattened using logistic function
+
+      repeat OutputNodes with i
+        fOutput[i] := utilities.sigmoid(utilities.SumMultiply(long[@fOutputWeights][t4index+i], i, @fHidden, @fOutputWeights, HiddenNodes, OutputNodes))                                 ' total per output node, curve flattened using logistic function
+
+        diff := long[@fTarget][t2index+i] -. fOutput[i]                         ' difference between target and output values
+        fOutputDelta[i] := diff *. utilities.sigmoidDer(fOutput[i])             ' gradient/derivative for sigmoid
+        fError := fError +. 0.5 *. diff *. diff                                 ' accum MSE for this time through training data
+
+      t1index := 0
+      repeat HiddenNodes with i                                                 ' Backpropagate errors to hidden layer
+        fAccum := 0.0
+        repeat OutputNodes with j
+          fAccum := fAccum +. fOutputWeights[t1index+j] *. fOutputDelta[j]
+        fHiddenDelta[i] := fAccum *. utilities.sigmoidDer(fHidden[i])           ' gradient/derivative for sigmoid
+        t1index += OutputNodes
+
+        fChangeHiddenWeights[t3index+i] := long[@fLearningRate] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t3index+i]
+        fHiddenWeights[t3index+i] := fHiddenWeights[t3index+i] +. fChangeHiddenWeights[t3index+i]
+        t5index := i
+        repeat InputNodes with j
+                                                                                ' update to hidden weights
+          fChangeHiddenWeights[t5index] := long[@fLearningRate] *. long[@fInput][tindex+j] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t5index]
+          fHiddenWeights[t5index] := fHiddenWeights[t5index] +. fChangeHiddenWeights[t5index]
+          t5index += HiddenNodes
+
+      repeat OutputNodes with i
+                                                                                ' update to output bias
+        fChangeOutputWeights[t4index+i] := long[@fLearningRate] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t4index+i]
+        fOutputWeights[t4index+i] := fOutputWeights[t4index+i] +. fChangeOutputWeights[t4index+i]
+        t1index := i
+        repeat HiddenNodes with j
+                                                                                ' update to output weights
+          fChangeOutputWeights[t1index] := long[@fLearningRate] *. fHidden[j] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t1index]
+          fOutputWeights[t1index] := fOutputWeights[t1index] +. fChangeOutputWeights[t1index]
+          t1index += OutputNodes
+
+    ifnot TrainingCycle&3
+      debug(`MyXY `((TrainingCycle*50-80_000),round(fError*.160_000.0)-80_000))
+
+    if fError < long[@fSuccess]                                                 ' If error rate is less than pre-determined threshold then end
+      quit
+
+  start := getms() - start
+  debug("Stop training ", udec(TrainingCycle), " total:", udec_(start), "ms, time:", udec_(start/TrainingCycle), ".", udec_(((start*10)/TrainingCycle)//10), "ms, ", fdec(fError))
+
+  ' print out the weights to paste into nn_drive.spin2
+  debug("fHiddenWeights")
+  repeat ((InputNodes + 1)*HiddenNodes) with i
+    debug(if((i+//HiddenNodes==0) and (i<>0)), " ")
+    debug("long ", fdec_(fHiddenWeights[i]))
+  debug("fEndHiddenWeights")
+  debug(" ")
+  debug("fOutputWeights")
+  repeat ((HiddenNodes + 1)*OutputNodes) with i
+    debug(if((i+//OutputNodes==0) and (i<>0)), " ")
+    debug("long ", fdec_(fOutputWeights[i]))
+  debug("fEndOutputWeights")
+'
+con { license }
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this
+  software and associated documentation files (the "Software"), to deal in the Software
+  without restriction, including without limitation the rights to use, copy, modify,
+  merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to the following
+  conditions:
+
+  The above copyright notice and this permission notice shall be included in all copies
+  or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+  PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+  OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+}}

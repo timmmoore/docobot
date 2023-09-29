@@ -8,8 +8,6 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Feb 2022
 ''   Updated.... 21 Jul 2022
-''   Updared.... 16 Sep 2023
-''                              Drop sense task to 50ms to try improve accuracy
 ''
 '' =================================================================================================
 CON { forward our interface constants }
@@ -514,6 +512,9 @@ CON { -- TASK position tracking -- }
 
     STACK_SIZE_LONGS = 64 ' WARNING! we exceed stack at 48!
 
+    ' at 50 ms
+    SENSE_LOOP_HZ = 20
+
 VAR { time values & arrays }
 
     long    ticks1ms
@@ -581,7 +582,7 @@ PRI updateWindowAccumulators()
     rtWheel.updateWindowAccumulators()
 
 PRI taskPostionSense() | senseStartTicks, eStopState
-' TASK: every 1/8 Sec (8Hz) read motor pos and calculate RPM and countOf90ths/Sec
+' TASK: every 1/20 Sec (20Hz) read motor pos and calculate RPM and countOf90ths/Sec
     LAINIT()
 
     eStopState := false
@@ -608,7 +609,7 @@ PRI taskPostionSense() | senseStartTicks, eStopState
 
         ' if user set time/distance to stop then stop if we are past the time or distance
         ' if both time and distance is used, first check until time is passed and then check distance
-        if motorStopMSecs > 0 and (getms() > motorStopMSecs)
+        if motorStopMSecs <> 0 and (getms() +> motorStopMSecs)
             stopMotors()
             motorStopMSecs := 0 ' and clear user request
         elseif motorStopHallTicks > 0
@@ -798,7 +799,7 @@ VAR { Data Structure for HDMI Debug }
     LONG    pTitlesAr[DBG_GROUPS_CT + 1]    ' first value is max vars
     LONG    pVarCtAr[DBG_GROUPS_CT]
     LONG    pNamesAr[DBG_GROUPS_CT * DBG_MAX_VARS_IN_GROUP]
-    LONG    pValsAr[DBG_GROUPS_CT*DBG_MAX_VARS_IN_GROUP]
+    LONG    pValsAr[DBG_GROUPS_CT * DBG_MAX_VARS_IN_GROUP]
 
 DAT { Literals for HDMI Debug }
 
