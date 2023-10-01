@@ -1,4 +1,6 @@
-{ Battery Config }
+{ Battery Config
+        Allow different bots to change battery monitoring
+}
 
 CON
   BATTERY_LOW                   = 0
@@ -8,4 +10,3 @@ CON
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
 PUB null()
-
