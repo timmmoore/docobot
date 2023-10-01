@@ -170,7 +170,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     numerator   :=    3300 * adc_fram                   ' calculate the adc scaling based off the adc_fram count
 
     ' setup driver parameters based on clock rate
-    dead_gap    := (ticks1us * 260) / 1_000 ' (was OFFSET) 260 of these made into "value nS"
+    dead_gap    := (ticks1us * 260) / 1_000             ' (was OFFSET) 260 of these made into "value nS"
     pwm_limit   := (frame_cnt / 2) - (dead_gap  / 2)    'PWM duty hard limit 1/2 freq of PWM
 
     ' .. and set up rest
@@ -179,7 +179,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
                                                         '    duty_min    := dead_gap << 4 #> dead_gap << 4
                                                         ' Chip's new code adjusted this, why?
                                                         '    duty_min    := 200 << 4 #> dead_gap << 4
-    duty_max    := (pwm_limit  << 4) / 2 <# pwm_limit << 4      ' ok
+    duty_max    := (pwm_limit  << 4) / 2 <# pwm_limit << 4 ' ok
                                                         'duty_max    := ((pwm_limit  << 4) / 4) * 3 <# pwm_limit << 4    ' BAD
                                                         'duty_max    := ((pwm_limit  << 4) / 8) * 5 <# pwm_limit << 4    ' BAD
     ' orig higher power code used this
@@ -915,10 +915,10 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
         eUserSelectedVolts := selectedPower
         fMotorVolts := motorVoltage(selectedPower)
         if user.MOTOR_TYPE == MOTR_DOCO_4KRPM
-            minFwdIncreAtPwr := 0 - minFwdIncreAtPwr
             minRevIncreAtPwr := 544_628                 ' anything below yields NO rotation
+            minFwdIncreAtPwr := 0 - minRevIncreAtPwr
         else
-            minFwdIncreAtPwr := 544_628           ' anything below yields NO rotation
+            minFwdIncreAtPwr := 544_628                 ' anything below yields NO rotation
             minRevIncreAtPwr := 0 - minFwdIncreAtPwr
     debug("* EXIT 2 CFG ", sdec_long(eUserSelectedVolts), " ", sdec(maxFwdIncreAtPwr), " ", sdec(minFwdIncreAtPwr))
 
@@ -2032,12 +2032,12 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 sar     err_, #24
 
                 abs     tmpY, err_                      ' fault? tmpY is absolute difference from hall angle to requested angle
-                cmp     tmpY, #125                  wc  ' less than ~176deg differ from requested? is ok
+                cmp     tmpY, #129                  wc  ' less than ~176deg differ from requested? is ok
+'                cmp     tmpY, #125                  wc  ' less than ~176deg differ from requested? is ok
                 testb   driveoff, #0                orc ' if driveoff is 1 then ignore fault, i.e., manually moving wheel
     if_nc       call    #.driveoff                      ' at FAULT: disable pwm output
     if_nc       mov     drv_state_, #DCS_FAULTED        '  also on FAULT: mark our motor as FAULTED
     if_nc       wrlong  maxNeg, ptra[DRVR_STATUS_LONGS_COUNT] '  also on FAULT: report fault
-
 .noFault        sub     tmpY, #256/6                wc  ' modulate duty (256 frac 6 - where 6 is # of hall cycles)
     if_nc       muls    tmpY, duty_up_
     if_c        muls    tmpY, duty_dn_
