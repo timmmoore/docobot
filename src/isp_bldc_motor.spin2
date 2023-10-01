@@ -2033,7 +2033,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
                 abs     tmpY, err_                      ' fault? tmpY is absolute difference from hall angle to requested angle
                 cmp     tmpY, #129                  wc  ' less than ~176deg differ from requested? is ok
-'                cmp     tmpY, #125                  wc  ' less than ~176deg differ from requested? is ok
                 testb   driveoff, #0                orc ' if driveoff is 1 then ignore fault, i.e., manually moving wheel
     if_nc       call    #.driveoff                      ' at FAULT: disable pwm output
     if_nc       mov     drv_state_, #DCS_FAULTED        '  also on FAULT: mark our motor as FAULTED
