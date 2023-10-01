@@ -218,7 +218,7 @@ CON { Hardware Description }
 
     DRIVE_VOLTAGE = PWR_11p1V
 
-    WHEEL_DIA_IN_INCH = 3.0   ' 3.0 inches (floating point constant)
+    WHEEL_DIA_IN_INCH = 2.75   ' 2.75 inches (floating point constant)
 
     LEFT_BOARD_TYPE = BRD_AUTO_DET
     RIGHT_BOARD_TYPE = BRD_AUTO_DET
