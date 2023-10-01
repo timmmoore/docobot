@@ -18,10 +18,16 @@ OBJ
   utilities   : "utilities"
 
 DAT
-fLearningRate            long 0.5                                               ' how much to follow the gradient
+fLearningRate            long 0.6                                               ' how much to follow the gradient
+fLearningRate1           long 0.5                                               ' how much to follow the gradient
+fLearningRate2           long 0.4                                               ' how much to follow the gradient
 fMomentum                long 0.9                                               ' how much to keep the current weights
+fMomentum1               long 0.95                                              ' how much to keep the current weights
+fMomentum2               long 0.95                                              ' how much to keep the current weights
 fInitialWeightMax        long 0.5                                               ' adjustment ot random for initial weights
 fSuccess                 long 0.0001                                            ' MSE error < this to complete
+fSuccess1                long 0.05                                              ' MSE error < this to switch to Momentum1
+fSuccess2                long 0.001                                             ' MSE error < this to switch to Momentum2
 
 fInput {[PatternCount][InputNodes]}
   long 0.0, 0.0, 0.0, 0.0, 0.0
@@ -149,9 +155,15 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index, t5index
           fOutputWeights[t1index] := fOutputWeights[t1index] +. fChangeOutputWeights[t1index] ' update to output weights
           t1index += OutputNodes
 
-    ifnot TrainingCycle&3
+    ifnot TrainingCycle&1
       debug(`MyXY `((TrainingCycle*50-80_000),round(fError*.160_000.0)-80_000))
 
+    if fError < long[@fSuccess2]                                                ' If error rate is less than pre-determined threshold then change Momentum
+      fLearningRate := fLearningRate2
+      fMomentum := fMomentum2
+    elseif fError < long[@fSuccess1]                                            ' If error rate is less than pre-determined threshold then change Momentum
+      fLearningRate := fLearningRate1
+      fMomentum := fMomentum1
     if fError < long[@fSuccess]                                                 ' If error rate is less than pre-determined threshold then end
       quit
 
@@ -171,6 +183,21 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index, t5index
     debug("long ", fdec_(fOutputWeights[i]))
   debug("fEndOutputWeights")
 '
+{
+  ' above training is noisy at start and then settles down
+  ' can it be fixed by adjusting LR/momentum as MSE reduces? e.g., increasing LR/momentum as ME reduces?
+
+  ' Regression problems require linear output functions, rather than sigmoids
+  Output[p][k] = SumO[p][k]
+  DeltaO[k] = Target[p][k] - Output[p][k]
+
+  ' Classification problems should use the Cross-Entropy error function, rather than Sum Squared Error
+  Error -= ( Target[p][k] * log( Output[p][k] ) + ( 1.0 - Target[p][k] ) * log( 1.0 - Output[p][k] ) )
+  DeltaO[k] = Target[p][k] - Output[p][k]
+
+  ' Muliple-class classification problems should really use the Softmax activation function
+
+}
 con { license }
 {{
 
