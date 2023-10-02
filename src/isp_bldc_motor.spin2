@@ -461,9 +461,8 @@ PUB stopAfterTime(nTime, eTimeUnits, toStop) | timeNow, timeStop
     if motorStopMSecs > 0
         debug("* stop motor at ", udec_long(motorStopMSecs), ", now: ", udec_long(timeNow), ", stop: ", udec_long(timeStop))
 
-PUB stopMotor() | current_down
+PUB stopMotor()
 '' Stops the motor, killing any motion that was still in progress
-''  faststop ramps to 0 faster
 ''  AFFECTED BY:holdAtStop()
     setTargetAccel(0, false)
 
@@ -1331,10 +1330,15 @@ PUB getTicksToStop() : retv | tinc, tms
 '' INTERNAL USE: return hall-ticks to stop from current speed
   tinc := targetIncre & $7fff_ffff                                              ' current target speed, remove sync flag
   retv := tinc := abs(tinc SIGNX 30)                                            ' add sign back before absolute
-  retv := ((retv >> 8) * 2000) >> 16                                            ' angle per sec
-  tms := getMsToStop()                                                          '
-  retv /= tms                                                                   ' angle per time to stop
-  'debug("getTicksToStop ",  sdec(tinc), " ", sdec(tms), " ", sdec(retv))
+  retv /= 2                                                                     ' average speed
+  retv := ((retv >> 8) * 2000) >> 15                                            ' angle per sec
+  retv /= 1000
+  if user.MOTOR_TYPE == MOTR_DOCO_4KRPM
+    retv := 3*retv
+    retv := retv <# 13                                                          ' more than this doesn't impact stopping
+  else
+    retv := (74*retv)/10
+  debug("getTicksToStop ",  sdec(tinc), " ", sdec(tms), " ", sdec(retv))
 
 PRI resetHdmiData()
     tvMaxFps_x10 := tvMaxMPH_x10 := tvMaxkPH_x10 := 0
