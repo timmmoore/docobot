@@ -96,7 +96,7 @@ PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMo
 '' Start our drive cogs connected to our left and right motor control pin-sets
     ticks1ms   := (clkfreq / 1_000)
     ticks1us   := (clkfreq / 1_000_000)
-    ticks50ms  := ticks1ms * 50
+    ticks10ms  := ticks1ms * 10
 
     ' iff HDMI is needed, then we need this!
     'if clkfreq <> 270_000_000
@@ -237,7 +237,7 @@ PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop) | degreesPerTic, t
         ticksToStopRt := ltWheel.getTicksToStop()
         motorStopHallTicks -= (ticksToStopLt > ticksToStopRt)?ticksToStopLt:ticksToStopRt
 
-    debug(" stopAfterRotation: ", udec(nRotationCount), " ", udec(degreesPerTic), " ", udec(ticsPerRotation), " ", udec(motorStopHallTicks), " ", udec(prestop), " ", sdec(ticksToStopLt), " ", sdec(ticksToStopRt))
+    debug(" stopAfterRotation: ", udec(nRotationCount), " ", udec(degreesPerTic), " ", udec(ticsPerRotation), " ", sdec(motorStopHallTicks), " ", udec(prestop), " ", sdec(ticksToStopLt), " ", sdec(ticksToStopRt))
 
 '' Stops both motors, after either of the motors reaches {distance} specified in {distanceUnits} [DDU_IN or DDU_MM].
 '' USE WITH: driveDirection(), drive()
@@ -539,7 +539,7 @@ VAR { time values & arrays }
 
     long    ticks1ms
     long    ticks1us
-    long    ticks50ms
+    long    ticks10ms
 
     long    senseCog
 
@@ -626,14 +626,13 @@ PRI taskPostionSense() | senseStartTicks, eStopState
 
         ' PROCESS left/right motor
         updateWindowAccumulators()
-
         ' if user set time/distance to stop then stop if we are past the time or distance
         ' if both time and distance is used, first check until time is passed and then check distance
         if motorStopMSecs <> 0 and (getms() +> motorStopMSecs)
             stopMotors()
             motorStopMSecs := 0                         ' and clear user request
         elseif motorStopHallTicks <> 0
-            'debug(" taskPostionSense: ", udec(motorStopHallTicks), " ", udec(ltWheel.getposTrkHallTicks()), " ", udec(rtWheel.getposTrkHallTicks()))
+            'debug(" taskPostionSense: ", sdec(motorStopHallTicks), " ", udec(ltWheel.getposTrkHallTicks()), " ", udec(rtWheel.getposTrkHallTicks()))
             if (ltWheel.getposTrkHallTicks() >= motorStopHallTicks or rtWheel.getposTrkHallTicks() >= motorStopHallTicks)
                 stopMotors()
                 motorStopHallTicks := 0                 ' and clear user request
@@ -653,7 +652,7 @@ PRI taskPostionSense() | senseStartTicks, eStopState
 
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
         '   wait remainder of 50 mSec before next sample
-        waitct(senseStartTicks + ticks50ms)                                     ' wait to create "sense" time-base
+        waitct(senseStartTicks + ticks10ms)                                     ' wait to create "sense" time-base
 
 PRI isEmergency() : bEmergencyState
 ' return T/F where T means one or both wheels are in emergency cutoff state
