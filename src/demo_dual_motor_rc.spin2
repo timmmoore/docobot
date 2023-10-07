@@ -255,7 +255,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
     'debug("* swC MID    - ---")
     debug("* swC DN     - end control")
     debug("* swD DN     - emer cutoff")
-    debug("* swE DN     - 1 rotation")
+    debug("* swE DN     - auto 6 rotate")
     debug("* swH DN     - autonomous")
     debug("* VRA        - acceleration")
     debug("* VRB        - autoroam speed")
@@ -381,7 +381,7 @@ PRI doRotation() | ltdegree, rtdegree
     wheels.driveDirection(10, 0)                                                ' drive forward slowly
     debug("  Onrotation Driving:", sdec(ltdegree), " ", sdec(rtdegree))
     'wheels.stopAfterTime(2, wheels.DTU_SEC, true)
-    wheels.stopAfterRotation(ltdegree+2160, wheels.DRU_DEGREES, true)            ' stop after 360degree wheel rotation
+    wheels.stopAfterRotation(ltdegree+2160, wheels.DRU_DEGREES, true)           ' stop after 6*360degree wheel rotation
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
     debug("  Onrotation Check:", sdec(ltdegree), " ", sdec(rtdegree))
     repeat while not wheels.isStopped()
